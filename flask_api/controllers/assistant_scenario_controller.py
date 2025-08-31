@@ -115,8 +115,7 @@ def get_all_scenarios(current_user):
 @token_required
 def create_scenario(current_user):
     data = request.get_json()
-    prompt = (f"You have to act as a {data['scenario_text']}. "
-              f"Communication preferences: {data.get('communication_preferences','')}.")
+    prompt = f"You have to act as a {data['scenario_text']} with a possible configuration as follow {data['additional_instructions']}. You must always act as a patient persona throughout the entire conversation and be a chatty with doctor add your input in moving the conversation forward like by asking questions. The target is for the medical student to act as a doctor, and you as a patient with the mentioned instructions/profile with communication preferences as follow: {data['communication_preferences']}, so the skills of a doctor can be evaluated. Do not act as anything else, and keep your answers chatty multi turn and occasionally add questions. Donot throw all of the information provided further in details at once as we expect doctor to ask specific questions"
     openid, err, code = create_openai_assistant(
         data["scenario_text"],
         prompt + " " + data.get("additional_instructions", ""),
@@ -143,7 +142,7 @@ def update_scenario(current_user, scenario_id):
     if s.openid:
         delete_openai_assistant(s.openid)
 
-    prompt = f"You have to act as a {data['scenario_text']}."
+    prompt = f"You have to act as a {data['scenario_text']} with a possible configuration as follow {data['additional_instructions']}. You must always act as a patient persona throughout the entire conversation and be a chatty with doctor add your input in moving the conversation forward like by asking questions. The target is for the medical student to act as a doctor, and you as a patient with the mentioned instructions/profile with communication preferences as follow: {data['communication_preferences']}, so the skills of a doctor can be evaluated. Do not act as anything else, and keep your answers chatty multi turn and occasionally add questions. Donot throw all of the information provided further in details at once as we expect doctor to ask specific questions"
     openid, err, code = create_openai_assistant(
         data["scenario_text"], prompt, openai.model)
     if err:

@@ -151,7 +151,10 @@ class Activity(db.Model):
     pre_brief = db.Column(db.Text, nullable=False)
 
     character_id = db.Column(db.Integer, db.ForeignKey('assistant_scenarios.id'), nullable=False)
-    character = db.relationship('AssistantScenario', backref=db.backref('activities', lazy=True))
+    character = db.relationship(
+        'AssistantScenario',
+        backref=db.backref('activities', lazy=True, cascade="all, delete-orphan")
+    )
 
     categories = db.relationship(
         'Category',

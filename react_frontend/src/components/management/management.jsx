@@ -155,11 +155,7 @@ const Management = () => {
           <IconButton onClick={() => handleDelete(params.row.id)}>
             <DeleteIcon />
           </IconButton>
-          <Switch
-          checked={params.value}
-          onChange={() => handleToggle(params.row.id)}
-          color="primary"
-        />
+         
         </>
       ),
     }
