@@ -3,3 +3,4 @@
 __pycache__/
 /secrets/
 *.pem
+docker-compose.yml

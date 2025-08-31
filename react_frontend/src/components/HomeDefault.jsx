@@ -3,46 +3,60 @@ import { Box, Card, CardContent, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ChatIcon from '@mui/icons-material/Chat';
-import './HomeDefault.css'; // Import the CSS file
+import './HomeDefault.css';
 import { useSelector } from 'react-redux';
 
 const HomeDefault = () => {
   const navigate = useNavigate();
-  const role = useSelector((state) => state.auth.role); // Adjust according to your state structure
-  
+  const role = useSelector((state) => state.auth.role);
+
+  const isAdmin = role === 'admin';
+
   const handleManageClick = () => {
-    if (role === 'admin') {
+    if (isAdmin) {
       navigate('/home/manage');
     }
   };
 
-  const handleActvities = () => {
-    if (role === 'admin') {
+  const handleActivities = () => {
+    if (isAdmin) {
       navigate('/home/manage_activities');
     }
   };
 
   const handleRubrics = () => {
-    if (role === 'admin') {
+    if (isAdmin) {
       navigate('/home/rubrics');
     }
   };
 
-  
-
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', height: '100%', gap: 2 }}>
+    <Box 
+      sx={{ 
+        display: 'flex', 
+        flexDirection: 'row', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100%', 
+        gap: 2 
+      }}
+    >
+      {/* Manage Assistants */}
       <Box className="home-default-box">
-        <Card className="home-default-card" onClick={handleManageClick}>
+        <Card 
+          className="home-default-card" 
+          onClick={handleManageClick} 
+          sx={{ opacity: isAdmin ? 1 : 0.6, cursor: isAdmin ? 'pointer' : 'not-allowed' }}
+        >
           <CardContent>
             <SettingsIcon className="home-default-icon" />
-            <Typography variant="h5" component="div" gutterBottom>
+            <Typography variant="h5" gutterBottom>
               Manage Assistants
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Manage your assistants here.
             </Typography>
-            {role !== 'admin' && (
+            {!isAdmin && (
               <Typography variant="caption" color="error">
                 Admin only
               </Typography>
@@ -50,17 +64,23 @@ const HomeDefault = () => {
           </CardContent>
         </Card>
       </Box>
+
+      {/* Manage Activities */}
       <Box className="home-default-box">
-        <Card className="home-default-card" onClick={handleActvities} >
+        <Card 
+          className="home-default-card" 
+          onClick={handleActivities} 
+          sx={{ opacity: isAdmin ? 1 : 0.6, cursor: isAdmin ? 'pointer' : 'not-allowed' }}
+        >
           <CardContent>
             <SettingsIcon className="home-default-icon" />
-            <Typography variant="h5" component="div" gutterBottom>
+            <Typography variant="h5" gutterBottom>
               Manage Activities
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Manage your Activities here.
+              Manage your activities here.
             </Typography>
-            {role !== 'admin' && (
+            {!isAdmin && (
               <Typography variant="caption" color="error">
                 Admin only
               </Typography>
@@ -69,17 +89,22 @@ const HomeDefault = () => {
         </Card>
       </Box>
 
+      {/* Manage Rubrics */}
       <Box className="home-default-box">
-        <Card className="home-default-card" onClick={handleRubrics} >
+        <Card 
+          className="home-default-card" 
+          onClick={handleRubrics} 
+          sx={{ opacity: isAdmin ? 1 : 0.6, cursor: isAdmin ? 'pointer' : 'not-allowed' }}
+        >
           <CardContent>
             <SettingsIcon className="home-default-icon" />
-            <Typography variant="h5" component="div" gutterBottom>
+            <Typography variant="h5" gutterBottom>
               Manage Rubrics
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Manage your Rubrics here.
+              Manage your rubrics here.
             </Typography>
-            {role !== 'admin' && (
+            {!isAdmin && (
               <Typography variant="caption" color="error">
                 Admin only
               </Typography>
@@ -88,11 +113,16 @@ const HomeDefault = () => {
         </Card>
       </Box>
 
+      {/* Talk to Assistants (always allowed) */}
       <Box className="home-default-box">
-        <Card className="home-default-card" onClick={() => navigate('/home/talk')}>
+        <Card 
+          className="home-default-card" 
+          onClick={() => navigate('/home/talk')} 
+          sx={{ cursor: 'pointer' }}
+        >
           <CardContent>
             <ChatIcon className="home-default-icon" />
-            <Typography variant="h5" component="div" gutterBottom>
+            <Typography variant="h5" gutterBottom>
               Talk to Assistants
             </Typography>
             <Typography variant="body2" color="text.secondary">

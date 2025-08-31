@@ -29,7 +29,12 @@ const HomeComponent = () => {
         <Box sx={{ flexGrow: 1, height: '30vh' }}>
             <AppBar position="static">
                 <Toolbar sx={{ justifyContent: 'space-between' }}>
-                    <Typography variant="h6" component="div">
+                    <Typography 
+                        variant="h6" 
+                        component="div" 
+                        sx={{ cursor: 'pointer' }} 
+                        onClick={() => navigate('/home')}
+                    >
                         Dashboard
                     </Typography>
                     <div>
