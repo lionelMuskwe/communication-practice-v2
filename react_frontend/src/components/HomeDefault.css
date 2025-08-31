@@ -1,0 +1,28 @@
+.home-default-box {
+    flex: 1 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 20px !important; /* Ensure some spacing around the card */
+  }
+  
+  .home-default-card {
+    width: 100% !important; /* Stretch the card to fill the container */
+    max-width: 400px !important; /* Limit the maximum width for better layout */
+    padding: 20px !important;
+    text-align: center !important;
+    box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.16) !important;
+    transition: transform 0.3s ease !important;
+    background-color: #f4f3f3 !important;
+  }
+  
+  .home-default-card:hover {
+    transform: translateY(-10px) !important;
+  }
+  
+  .home-default-icon {
+    font-size: 60px !important;
+    margin-bottom: 20px !important;
+    color: #01020b !important; /* Optional: change icon color to match your theme */
+  }
+  

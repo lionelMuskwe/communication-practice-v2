@@ -1,0 +1,11 @@
+from ..app import db
+from .user import User
+from .scenarios import  AssistantScenario
+
+__all__ = [
+    'db',
+    'User',
+    'AssistantScenario'
+    # Add other model names here
+    
+]

@@ -1,0 +1,25 @@
+.assistant-card {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  
+  .assistant-card-icon {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background-color: var(--mui-palette-primary-main);
+  }
+  
+  .assistant-card-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+  }
+  
+  .assistant-card-description {
+    color: var(--mui-palette-text-secondary);
+  }
+  

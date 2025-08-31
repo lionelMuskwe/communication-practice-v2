@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "docker-build-api",
+            "type": "shell",
+            "command": "docker-compose build api",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "docker-stop-api",
+            "type": "shell",
+            "command": "docker-compose stop api || true",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "docker-rm-api",
+            "type": "shell",
+            "command": "docker-compose rm -f api || true",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "docker-run-api",
+            "type": "shell",
+            "command": "docker-compose up -d --build api",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
