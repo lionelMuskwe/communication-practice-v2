@@ -1,19 +1,4 @@
-version: "3.9"
-
 services:
-  db:
-    image: postgres:15.6-alpine
-    container_name: postgres_db
-    restart: unless-stopped
-    secrets:
-      - db_url
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
-    networks:
-      - app_network
-
   api:
     build:
       context: ./flask_api
@@ -35,11 +20,7 @@ services:
     volumes:
       - ./flask_api:/app:ro
     expose:
-      - "8000"
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
+      - "8000"                 # internal only; frontend reaches this via Docker DNS "api"
     networks:
       - app_network
 
@@ -54,14 +35,11 @@ services:
     volumes:
       - ./react_frontend/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "80:80"
+      - "80:80"                # public HTTP
     depends_on:
       - api
     networks:
       - app_network
-
-volumes:
-  postgres_data:
 
 networks:
   app_network:
