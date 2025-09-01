@@ -7,27 +7,35 @@ import PersonIcon from '@mui/icons-material/Person';
 import SendIcon from '@mui/icons-material/Send';
 import MicIcon from '@mui/icons-material/Mic';
 import ChatResultsDialog from './result_dialog';
-import { post } from '../../services/apiService';
+
+import {
+  createThread,
+  addMessage,
+  runThread,
+  getRunStatus,
+  get, // generic GET
+} from '../../services/apiService';
 
 const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedActivityId }) => {
   const [threadID, setThreadID] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]); // ALWAYS oldest -> newest
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [resultsRubrics, setResultsRubrics] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState('');
+
   const recognitionRef = useRef(null);
   const endOfMessagesRef = useRef(null);
+  const lastSpokenRef = useRef(null); // remember last spoken assistant message
 
-  // Create thread on mount
+  // Create a fresh thread on mount
   useEffect(() => {
-    const createThread = async () => {
+    (async () => {
       try {
-        const payload = {};
-        const res = await post('/create_thread', payload);
-        if (res.status === 200 && res.data?.thread_id) {
+        const res = await createThread(); // POST /api/threads
+        if ((res.status === 201 || res.status === 200) && res.data?.thread_id) {
           setThreadID(res.data.thread_id);
         } else {
           console.warn('Failed to create thread', res);
@@ -35,16 +43,58 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
       } catch (err) {
         console.error('Error creating thread:', err);
       }
-    };
-    createThread();
+    })();
   }, []);
 
-  // Scroll to bottom on messages change
+  // Scroll to bottom whenever messages change
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Voice to text: mic handler
+  // Normalise server messages (ensure ms timestamp; sort oldest -> newest)
+  const normalise = (arr) => {
+    const toMs = (t) =>
+      typeof t === 'number' ? (t > 1e12 ? t : t * 1000) : Date.parse(t || 0);
+    return [...arr]
+      .map((m) => ({ ...m, created_at: toMs(m.created_at) || Date.now() }))
+      .sort((a, b) => a.created_at - b.created_at);
+  };
+
+  // Fetch & set messages for the thread
+  const refreshMessages = async (tid) => {
+    try {
+      const res = await get(`/threads/${encodeURIComponent(tid)}/messages`);
+      if (Array.isArray(res?.data)) {
+        const sorted = normalise(res.data);
+        setMessages(sorted);
+        return sorted;
+      }
+    } catch (err) {
+      console.error('Failed to refresh messages:', err);
+    }
+    return [];
+  };
+
+  // Speak latest assistant reply, but only once
+  const speakLatestAssistant = (arr) => {
+    const lastAssistant = [...arr].reverse().find((m) => m.role !== 'user' && m.message);
+    if (!lastAssistant) return;
+
+    const key = `${lastAssistant.created_at}|${lastAssistant.message}`;
+    if (lastSpokenRef.current === key) return; // already spoken
+
+    lastSpokenRef.current = key;
+    try {
+      const utter = new window.SpeechSynthesisUtterance(lastAssistant.message);
+      utter.lang = 'en-GB';
+      window.speechSynthesis.cancel(); // stop any ongoing speech
+      window.speechSynthesis.speak(utter);
+    } catch (e) {
+      console.warn('SpeechSynthesis failed:', e);
+    }
+  };
+
+  // Mic handler
   const handleMicClick = () => {
     setMicError('');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -54,7 +104,7 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
       return;
     }
     if (isRecording) {
-      if (recognitionRef.current) recognitionRef.current.stop();
+      recognitionRef.current?.stop();
       setIsRecording(false);
       return;
     }
@@ -64,24 +114,17 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
 
-      recognition.onstart = () => {
-        console.log('Mic: Recording started');
-        setIsRecording(true);
-      };
+      recognition.onstart = () => setIsRecording(true);
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         setNewMessage(transcript);
-        console.log('Mic: Transcription:', transcript);
       };
       recognition.onerror = (event) => {
         console.error('Mic error:', event.error);
         setMicError(`Speech recognition error: ${event.error}`);
         setIsRecording(false);
       };
-      recognition.onend = () => {
-        console.log('Mic: Recording ended');
-        setIsRecording(false);
-      };
+      recognition.onend = () => setIsRecording(false);
 
       recognitionRef.current = recognition;
       recognition.start();
@@ -92,85 +135,73 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
     }
   };
 
-  // Send message
+  // Send message and run the assistant with full Activity + Scenario context
   const handleSendMessage = async () => {
-    if (!newMessage.trim()) return;
-
-    const payload = {
-      assistant_id: selectedAssistantID,
-      thread_id: threadID,
-      role: 'user',
-      content: newMessage,
-    };
+    const text = newMessage.trim();
+    if (!text || !threadID) return;
 
     try {
-      setMessages(prev => [
-        { role: 'user', message: newMessage, created_at: new Date() },
+      // Optimistic APPEND at the END (oldest -> newest)
+      setMessages((prev) => [
         ...prev,
+        { role: 'user', message: text, created_at: Date.now() },
       ]);
       setNewMessage('');
       setIsTyping(true);
 
-      await post('/threads/send_message', payload);
+      // 1) Add the user message to the OpenAI thread
+      await addMessage({ thread_id: threadID, role: 'user', content: text });
 
-      const runRes = await post('/threads/run', {
-        assistant_id: selectedAssistantID,
+      // 2) Start a run with BOTH IDs so the server injects full context
+      const runRes = await runThread({
         thread_id: threadID,
+        activity_id: selectedActivityId,
+        scenario_id: selectedAssistantID,
       });
 
-      if (runRes.status === 200 && runRes.data?.id) {
-        const runId = runRes.data.id;
-        const pollStatus = async () => {
-          try {
-            const statusRes = await post('/threads/check_run_status', {
-              thread_id: threadID,
-              run_id: runId,
-            });
-            const status = statusRes.data.status;
-            if (status === 'completed') {
-              const messagesRes = await post('/threads/get_all_messages', {
-                thread_id: threadID,
-              });
-              setMessages(messagesRes.data);
-              setIsTyping(false);
+      const runId = runRes?.data?.run_id;
+      if (!runId) {
+        console.warn('No run_id returned', runRes);
+        setIsTyping(false);
+        return;
+      }
 
-              // Read the assistant reply aloud (text-to-speech)
-              const latestMsg = messagesRes.data.find(m => m.role !== 'user');
-              if (latestMsg && latestMsg.message) {
-                try {
-                  const utter = new window.SpeechSynthesisUtterance(latestMsg.message);
-                  utter.lang = 'en-GB';
-                  window.speechSynthesis.speak(utter);
-                } catch (ttsErr) {
-                  console.warn('SpeechSynthesis failed:', ttsErr);
-                }
-              }
-            } else if (status === 'queued' || status === 'in_progress') {
-              setTimeout(pollStatus, 1000); // Retry in 1 second
-            } else {
-              setIsTyping(false);
-            }
-          } catch (err) {
+      // 3) Poll run status until completed, then refresh and speak
+      const poll = async () => {
+        try {
+          const statusRes = await getRunStatus({ run_id: runId, thread_id: threadID });
+          const status = statusRes?.data?.status;
+          if (status === 'completed') {
+            const arr = await refreshMessages(threadID);
+            speakLatestAssistant(arr);
+            setIsTyping(false);
+          } else if (status === 'queued' || status === 'in_progress') {
+            setTimeout(poll, 1000);
+          } else {
             setIsTyping(false);
           }
-        };
-        pollStatus();
-      }
+        } catch (e) {
+          console.error('Status polling error:', e);
+          setIsTyping(false);
+        }
+      };
+      poll();
     } catch (err) {
+      console.error('Send/run failed:', err);
       setIsTyping(false);
     }
   };
 
-  // Open assessment dialog
+  // Assessment dialog (unchanged API path for now)
   const openDialog = async () => {
     try {
       const payload = { messages };
-      const rubricsRes = await post(`/scenarios/${selectedActivityId}/rubric_responses`, payload);
+      const rubricsRes = await get(`/scenarios/${selectedActivityId}/rubric_responses`, payload);
       if (rubricsRes.status === 200) {
         setResultsRubrics(rubricsRes.data.evaluations || []);
         setDialogOpen(true);
       }
-    } catch (err) { /* handle error */ }
+    } catch { /* ignore */ }
   };
 
   return (
@@ -193,28 +224,35 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
         {/* Messages */}
         <Grid item xs={12}>
           <List sx={{ height: '60vh', overflowY: 'auto', px: 2 }}>
-            {messages.slice().reverse().map((msg, idx) => (
-              <ListItem key={idx}>
-                <Grid container justifyContent={msg.role === 'user' ? 'flex-end' : 'flex-start'}>
-                  <Grid item xs={12} sm={msg.role === 'user' ? 6 : 8}>
-                    <Box
-                      sx={{
-                        bgcolor: msg.role === 'user' ? '#E1F5FE' : '#F1F1F1',
-                        borderRadius: 2,
-                        px: 2,
-                        py: 1,
-                        textAlign: msg.role === 'user' ? 'right' : 'left',
-                      }}
-                    >
-                      <ListItemText
-                        primary={msg.message}
-                        secondary={new Date(msg.created_at).toLocaleTimeString()}
-                      />
-                    </Box>
+            {messages.map((msg, idx) => {
+              const isUser = msg.role === 'user';
+              const time = (() => {
+                try {
+                  return new Date(msg.created_at).toLocaleTimeString();
+                } catch {
+                  return '';
+                }
+              })();
+              return (
+                <ListItem key={idx}>
+                  <Grid container justifyContent={isUser ? 'flex-end' : 'flex-start'}>
+                    <Grid item xs={12} sm={isUser ? 6 : 8}>
+                      <Box
+                        sx={{
+                          bgcolor: isUser ? '#E1F5FE' : '#F1F1F1',
+                          borderRadius: 2,
+                          px: 2,
+                          py: 1,
+                          textAlign: isUser ? 'right' : 'left',
+                        }}
+                      >
+                        <ListItemText primary={msg.message} secondary={time} />
+                      </Box>
+                    </Grid>
                   </Grid>
-                </Grid>
-              </ListItem>
-            ))}
+                </ListItem>
+              );
+            })}
             {isTyping && (
               <ListItem>
                 <Grid container justifyContent="flex-start">
@@ -226,7 +264,7 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
                         px: 2,
                         py: 1,
                         fontStyle: 'italic',
-                        color: 'gray',
+                        color: 'grey',
                       }}
                     >
                       GPT is typing...
@@ -244,7 +282,7 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
             <Grid item xs={10}>
               <TextField
                 fullWidth
-                label={micError ? micError : "Type something or use the mic..."}
+                label={micError ? micError : 'Type something or use the mic...'}
                 value={newMessage}
                 disabled={!threadID}
                 onChange={(e) => setNewMessage(e.target.value)}
@@ -271,14 +309,12 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
           </Grid>
         </Grid>
       </Grid>
+
       {/* Assessment Modal */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth>
         <DialogTitle>GPT Assessment</DialogTitle>
         <DialogContent>
-          <ChatResultsDialog
-            evaluations={resultsRubrics}
-            messages={messages}
-          />
+          <ChatResultsDialog evaluations={resultsRubrics} messages={messages} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
