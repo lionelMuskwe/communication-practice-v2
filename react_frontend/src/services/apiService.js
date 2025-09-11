@@ -16,10 +16,7 @@ const API_BASE_URL = (() => {
     null;
 
   if (envBase) return envBase.replace(/\/+$/, ''); // trim trailing slash
-
-  if (process.env.NODE_ENV === 'production') {
-    return '/api';
-  }
+  if (process.env.NODE_ENV === 'production') return '/api';
   return 'http://localhost:5000/api';
 })();
 
@@ -31,11 +28,13 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
-  timeout: 30000,
+  // Default for normal API calls (threads, messages, etc.)
+  timeout: 60000,
 });
 
 // ─────────────────────────────────────────────────────────────
-// Request interceptor: attach Bearer token
+// Request interceptor: attach Bearer token + bump timeout for
+// long-running endpoints (rubric assessment).
 // ─────────────────────────────────────────────────────────────
 apiClient.interceptors.request.use(
   (config) => {
@@ -44,18 +43,30 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Auto-extend timeout for long rubric assessments if not already overridden.
+    // This lets ChatWindow keep using `post(...)` without passing options.
+    const url = (config.url || '').toString();
+    if (/\/rubric_assessment\b/.test(url)) {
+      const current = typeof config.timeout === 'number' ? config.timeout : 30000;
+      // Use at least 120s for rubric assessment
+      config.timeout = Math.max(current, 120000);
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
 );
 
 // ─────────────────────────────────────────────────────────────
-// Response interceptor: handle 401s and common errors
+// Response interceptor: handle 401s, rate limits, timeouts, etc.
 // ─────────────────────────────────────────────────────────────
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
+    const code = error?.code;
+    const reqUrl = error?.config?.url || '';
 
     if (status === 401) {
       store.dispatch(logout());
@@ -65,7 +76,6 @@ apiClient.interceptors.response.use(
           severity: 'error',
         })
       );
-      // history.push() may not always be wired to the app Router instance.
       try {
         history.push('/login');
       } catch {
@@ -78,8 +88,19 @@ apiClient.interceptors.response.use(
           severity: 'warning',
         })
       );
+    } else if (code === 'ECONNABORTED') {
+      // Timeout
+      const isRubric = /\/rubric_assessment\b/.test(reqUrl);
+      store.dispatch(
+        showSnackbar({
+          message: isRubric
+            ? 'Assessment took longer than expected. Please try again.'
+            : 'Request timed out. Please try again.',
+          severity: 'warning',
+        })
+      );
     } else if (!status) {
-      // Network error / CORS / timeout
+      // Network error / CORS / server unreachable
       store.dispatch(
         showSnackbar({
           message: 'Network error. Please check your connection.',
@@ -93,12 +114,16 @@ apiClient.interceptors.response.use(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Generic helpers (kept for existing calls)
+// Generic helpers (allow optional axios options, e.g. timeout)
 // ─────────────────────────────────────────────────────────────
-export const get = (url, params) => apiClient.get(url, { params });
-export const post = (url, data) => apiClient.post(url, data);
-export const put = (url, data) => apiClient.put(url, data);
-export const del = (url) => apiClient.delete(url);
+export const get  = (url, params, opts = {}) => apiClient.get(url, { params, ...opts });
+export const post = (url, data, opts = {}) => apiClient.post(url, data, { ...opts });
+export const put  = (url, data, opts = {}) => apiClient.put(url, data, { ...opts });
+export const del  = (url, opts = {}) => apiClient.delete(url, { ...opts });
+
+// Convenience helper for long posts
+export const postLong = (url, data, timeoutMs = 120000) =>
+  apiClient.post(url, data, { timeout: timeoutMs });
 
 // ─────────────────────────────────────────────────────────────
 // Domain helpers (use these to ensure correct payloads)
@@ -127,5 +152,31 @@ export const getRunStatus = ({ run_id, thread_id }) =>
 export const previewContext = ({ activity_id, scenario_id }) =>
   get('/context/preview', { activity_id, scenario_id });
 
-// Expose the client and base URL for rare cases
+// Rubric assessment (activity → categories/subcategories) — long running
+export const rubricAssessment = ({
+  activity_id,
+  scenario_id,
+  messages,
+  timeoutMs = 120000,
+}) =>
+  postLong(
+    `/activities/${encodeURIComponent(activity_id)}/rubric_assessment`,
+    { messages, scenario_id },
+    timeoutMs
+  );
+
+// Legacy per-scenario rubric questions (shorter, but allow override)
+export const rubricResponses = ({
+  activity_id,
+  scenario_id,
+  messages,
+  timeoutMs = 60000,
+}) =>
+  post(
+    `/scenarios/${encodeURIComponent(activity_id)}/rubric_responses`,
+    { messages, scenario_id },
+    { timeout: timeoutMs }
+  );
+
+// Expose the client and base URL (rare cases)
 export { apiClient, API_BASE_URL };
