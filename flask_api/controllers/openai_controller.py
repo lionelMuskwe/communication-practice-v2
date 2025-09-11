@@ -13,6 +13,8 @@ from utils import token_required
 from pathlib import Path
 import os
 import requests
+import json
+
 
 openai_assistant_bp = Blueprint("openai_assistant_bp", __name__)
 
@@ -305,6 +307,121 @@ def run_status(current_user, run_id: str):
         logger.error(f"Check run status failed: {e}")
         return jsonify({"message": "Internal server error"}), 500
 
+@openai_assistant_bp.route(
+    "/scenarios/<int:activity_id>/rubric_responses",
+    methods=["POST"],
+    endpoint="rubric_responses_api"   # unique endpoint name
+)
+@token_required
+def rubric_responses_api(current_user, activity_id: int):
+    """
+    Body: { "messages": [ {role, message, created_at?}, ... ] }
+    Uses the activity's linked character (AssistantScenario) to pull rubric questions,
+    and asks OpenAI to evaluate the transcript. Returns { evaluations: [...] }.
+    """
+    try:
+        body = request.get_json(force=True) or {}
+        convo = body.get("messages", [])
+
+        # Resolve activity -> scenario
+        activity: Activity | None = Activity.query.get(activity_id)
+        scenario: AssistantScenario | None = None
+        if activity and getattr(activity, "character_id", None):
+            scenario = AssistantScenario.query.get(activity.character_id)
+        if not scenario:
+            return jsonify({"message": "Scenario not found for this activity"}), 404
+
+        # Pull rubric questions
+        rubric_items = []
+        for rq in getattr(scenario, "rubrics", []) or []:
+            q = (getattr(rq, "question", "") or "").strip()
+            if q:
+                rubric_items.append(q)
+
+        # If no rubric configured, return empty evaluation gracefully
+        if not rubric_items:
+            return jsonify({"evaluations": []}), 200
+
+        # Build a compact transcript (oldest -> newest, last ~30 turns, max ~8k chars)
+        lines = []
+        for m in (convo or [])[-30:]:
+            role = (m.get("role") or "").strip()
+            text = (m.get("message") or m.get("content") or "").strip()
+            if text:
+                lines.append(f"{role}: {text}")
+        transcript = "\n".join(lines)
+        if len(transcript) > 8000:
+            transcript = transcript[-8000:]
+
+        # Compose the evaluation instruction
+        model_name = _get_openai_model_default()
+        key = _get_openai_key()
+
+        system = (
+            "You are an examiner. Score the DOCTOR's performance against the rubric.\n"
+            "Scoring:\n"
+            "- 0 = Not addressed\n"
+            "- 1 = Partly addressed / superficial\n"
+            "- 2 = Fully addressed / appropriate\n\n"
+            "Output ONLY JSON with the key 'evaluations'."
+        )
+        rubrics_block = "\n".join(f"{i+1}. {q}" for i, q in enumerate(rubric_items))
+        user_msg = (
+            f"RUBRIC QUESTIONS:\n{rubrics_block}\n\n"
+            f"TRANSCRIPT (patient↔doctor):\n{transcript}\n\n"
+            "Return JSON like:\n"
+            '{"evaluations":[{"question":"...","score":0,"feedback":"..."}]}'
+        )
+
+        # Call Chat Completions
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model_name,
+                "temperature": 0.2,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                "response_format": {"type": "json_object"},
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+
+        try:
+            data = json.loads(content)
+        except Exception:
+            data = {"evaluations": []}
+
+        # Normalise the shape
+        evals = data.get("evaluations") or []
+        norm = []
+        for i, q in enumerate(rubric_items):
+            item = evals[i] if i < len(evals) else {}
+            norm.append({
+                "question": q,
+                "score": item.get("score", 0),
+                "feedback": item.get("feedback", ""),
+            })
+
+        return jsonify({"evaluations": norm}), 200
+
+    except requests.HTTPError as http_err:
+        try:
+            return jsonify({"message": "OpenAI error", "details": http_err.response.json()}), http_err.response.status_code
+        except Exception:
+            return jsonify({"message": f"OpenAI error: {http_err}"}), 500
+    except Exception as e:
+        logger.exception(f"rubric_responses failed: {e}")
+        return jsonify({"message": "Internal server error"}), 500
+
+
 @openai_assistant_bp.route("/context/preview", methods=["GET"])
 @token_required
 def preview_context(current_user):
@@ -318,4 +435,9 @@ def preview_context(current_user):
         scenario = AssistantScenario.query.get(activity.character_id)
 
     ctx = build_full_context(activity, scenario)
-    return jsonify({"activity_id": activity_id, "scenario_id": scenario_id, "context": ctx, "length": len(ctx)}), 200
+    return jsonify({
+        "activity_id": activity_id,
+        "scenario_id": scenario_id,
+        "context": ctx,
+        "length": len(ctx)
+    }), 200
