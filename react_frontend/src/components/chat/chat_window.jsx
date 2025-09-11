@@ -13,8 +13,8 @@ import {
   addMessage,
   runThread,
   getRunStatus,
-  get, // generic GET
-  post, // new
+  get,   // generic GET
+  post,  // generic POST
 } from '../../services/apiService';
 
 const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedActivityId }) => {
@@ -193,21 +193,28 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
     }
   };
 
-  // Assessment dialog (unchanged API path for now)
-const openDialog = async () => {
-   try {
-     const cleaned = messages.map(({ role, message, created_at }) => ({ role, message, created_at }));
-   const idForEndpoint = selectedAssistantID ?? selectedActivityId;
+  // Assessment dialog — POST to activity endpoint, include scenario_id in body
+  const openDialog = async () => {
+    try {
+      const cleaned = messages.map(({ role, message, created_at }) => ({ role, message, created_at }));
 
-     const rubricsRes = await post(`/scenarios/${idForEndpoint}/rubric_responses`, { messages: cleaned });
-     if (rubricsRes.status === 200) {
-       setResultsRubrics(rubricsRes.data.evaluations || []);
-       setDialogOpen(true);
-     }
-   } catch (err) {
+      const rubricsRes = await post(
+        `/scenarios/${selectedActivityId}/rubric_responses`,
+        {
+          messages: cleaned,
+          scenario_id: selectedAssistantID, // <-- important: pass the character id here
+        }
+      );
+
+      if (rubricsRes.status === 200) {
+        setResultsRubrics(rubricsRes.data.evaluations || []);
+        setDialogOpen(true);
+      }
+    } catch (err) {
       console.error('Rubric fetch failed:', err);
-   }
- };
+    }
+  };
+
   return (
     <Box>
       <Grid container component={Paper} sx={{ width: '100%' }}>
