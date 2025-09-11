@@ -182,7 +182,7 @@ def _http_error_response(http_err: requests.HTTPError):
     return jsonify({"message": "OpenAI error", "details": details}), status
 
 # ──────────────────────────────────────────────────────────────
-# Routes
+# Threads & runs (Assistants API) – REST endpoints
 # ──────────────────────────────────────────────────────────────
 @openai_assistant_bp.route("/threads", methods=["POST"])
 @token_required
@@ -217,7 +217,7 @@ def add_message(current_user, thread_id: str):
 @openai_assistant_bp.route("/threads/<thread_id>/messages", methods=["GET"])
 @token_required
 def list_messages(current_user, thread_id: str):
-    """Return [{ role, message, created_at }] for UI."""
+    """Return [{ role, message, created_at }] for UI (oldest-first)."""
     try:
         data = _list_messages(thread_id)
         items = []
@@ -242,10 +242,10 @@ def list_messages(current_user, thread_id: str):
 @token_required
 def run_thread(current_user):
     """
-    Body accepts:
+    Body:
       - thread_id (required)
       - scenario_id (preferred) OR assistant_id (legacy name for scenario id)
-      - activity_id (optional but recommended)
+      - activity_id (optional)
       - model (optional override)
     """
     try:
@@ -263,7 +263,6 @@ def run_thread(current_user):
 
         if activity_id:
             activity = Activity.query.get(activity_id)
-
         if scenario_id:
             scenario = AssistantScenario.query.get(scenario_id)
         elif activity and getattr(activity, "character_id", None):
@@ -307,6 +306,242 @@ def run_status(current_user, run_id: str):
         logger.error(f"Check run status failed: {e}")
         return jsonify({"message": "Internal server error"}), 500
 
+# ──────────────────────────────────────────────────────────────
+# Rubric helpers & endpoints
+# ──────────────────────────────────────────────────────────────
+
+# --- helper to load activity→categories→subcategories -----------------
+def _load_activity_rubric(activity_id: int):
+    """
+    Load rubric as:
+    [
+      {
+        "category_id": <int>,
+        "name": <str>,
+        "required_to_pass": <int|None>,
+        "criteria": [
+           {"subcategory_id": <int>, "name": <str>, "marking_instructions": <str>}
+        ]
+      }, ...
+    ]
+    Works whether you have an Activity.categories relationship OR only an
+    association table named 'activity_categories'.
+    """
+    # 1) Try to use the relationship first (most robust)
+    act = Activity.query.get(activity_id)
+    assigned = []
+    if act is not None and hasattr(act, "categories") and act.categories is not None:
+        assigned = list(act.categories)
+
+    # 2) Fallback: resolve via association table if relationship is missing/empty
+    if not assigned:
+        assoc = db.metadata.tables.get("activity_categories")
+        if not assoc:
+            return []  # neither relationship nor assoc table available
+        assigned = (
+            db.session.query(Category)
+            .join(assoc, assoc.c.category_id == Category.id)
+            .filter(assoc.c.activity_id == activity_id)
+            .order_by(Category.id)
+            .all()
+        )
+
+    if not assigned:
+        return []
+
+    cat_ids = [c.id for c in assigned]
+
+    # Pull subcriteria per category
+    subs = (
+        SubCategory.query
+        .filter(SubCategory.category_id.in_(cat_ids))
+        .order_by(SubCategory.category_id, SubCategory.id)
+        .all()
+    )
+
+    subs_by_cat: dict[int, list[dict]] = {}
+    for s in subs:
+        subs_by_cat.setdefault(s.category_id, []).append({
+            "subcategory_id": s.id,
+            "name": (s.name or "").strip(),
+            "marking_instructions": (s.marking_instructions or "").strip(),
+        })
+
+    rubric = []
+    for c in assigned:
+        rubric.append({
+            "category_id": c.id,
+            "name": (c.name or "").strip(),
+            "required_to_pass": getattr(c, "total_required_to_pass", None),
+            "criteria": subs_by_cat.get(c.id, []),
+        })
+    return rubric
+
+# --- NEW: evaluate per activity by categories/subcategories -----------
+@openai_assistant_bp.route(
+    "/activities/<int:activity_id>/rubric_assessment",
+    methods=["POST"],
+    endpoint="rubric_assessment_api",
+)
+@token_required
+def rubric_assessment_api(current_user, activity_id: int):
+    try:
+        body = request.get_json(force=True) or {}
+        convo = body.get("messages", [])
+        scenario_id = body.get("scenario_id")
+
+        # (optional) find scenario from activity if you want to include name/role in context
+        activity = Activity.query.get(activity_id)
+        scenario = None
+        if scenario_id:
+            scenario = AssistantScenario.query.get(scenario_id)
+        elif activity and getattr(activity, "character_id", None):
+            scenario = AssistantScenario.query.get(activity.character_id)
+
+        # 1) Load rubric from DB (categories + their subcriteria)
+        rubric = _load_activity_rubric(activity_id)
+        if not rubric:
+            return jsonify({"categories": [], "overall": {"total_score": 0, "passed": True}}), 200
+
+        # 2) Build compact transcript with stable indices so the model can cite evidence
+        lines = []
+        trimmed = (convo or [])[-40:]  # last ~40 turns
+        for idx, m in enumerate(trimmed):
+            role = (m.get("role") or "").strip()
+            who = "DOCTOR" if role == "user" else "PATIENT"
+            text = (m.get("message") or m.get("content") or "").strip()
+            if text:
+                lines.append(f"[{idx}] {who}: {text}")
+        transcript = "\n".join(lines)
+        if len(transcript) > 12000:
+            transcript = transcript[-12000:]
+
+        # 3) Ask OpenAI for JSON back per category/subcriterion with evidence and rewrites
+        key = _get_openai_key()
+        model_name = _get_openai_model_default()
+
+        system = (
+            "You are an examiner. Grade the DOCTOR against the rubric below.\n"
+            "Score each subcriterion: 0=not addressed, 1=partly/superficial, 2=fully addressed.\n"
+            "Use ONLY the DOCTOR messages as evidence. Cite message indices from the transcript.\n"
+            "If a subcriterion was not addressed, suggest a short, natural rewrite the DOCTOR could say.\n"
+            "Output strictly JSON following the given schema."
+        )
+
+        schema_hint = {
+            "categories": [
+                {
+                    "category_id": "int",
+                    "name": "string",
+                    "score": "int",
+                    "passed": "bool",
+                    "criteria": [
+                        {
+                            "subcategory_id": "int",
+                            "name": "string",
+                            "score": "int",
+                            "evidence": {
+                                "message_indices": ["int"],
+                                "quotes": ["string"]
+                            },
+                            "rewrite_if_missing": "string"
+                        }
+                    ]
+                }
+            ],
+            "overall": {"total_score": "int", "passed": "bool"}
+        }
+
+        user_msg = (
+            "RUBRIC (JSON):\n"
+            + json.dumps(rubric, ensure_ascii=False, indent=2)
+            + "\n\nTRANSCRIPT (indexed):\n"
+            + transcript
+            + "\n\nReturn JSON shaped like:\n"
+            + json.dumps(schema_hint, ensure_ascii=False)
+        )
+
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model_name,
+                "temperature": 0.1,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                "response_format": {"type": "json_object"},
+            },
+            timeout=90,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+
+        try:
+            data = json.loads(content)
+        except Exception:
+            # If the model ever slips, return an empty but well-formed payload
+            data = {"categories": [], "overall": {"total_score": 0, "passed": False}}
+
+        # Safety-normalise the shape (ensure all categories returned)
+        out_categories = []
+        by_cat = {c["category_id"]: c for c in data.get("categories", []) if isinstance(c, dict) and "category_id" in c}
+        total = 0
+        for c in rubric:
+            picked = by_cat.get(c["category_id"], {})
+            crit_in = picked.get("criteria", []) if isinstance(picked.get("criteria", []), list) else []
+            # map subcriteria by id
+            by_sub = {x.get("subcategory_id"): x for x in crit_in if isinstance(x, dict)}
+            crit_out = []
+            cat_score = 0
+            for sub in c["criteria"]:
+                item = by_sub.get(sub["subcategory_id"], {})
+                s = item.get("score", 0)
+                s = int(s) if isinstance(s, int) else 0
+                cat_score += s
+                crit_out.append({
+                    "subcategory_id": sub["subcategory_id"],
+                    "name": sub["name"],
+                    "score": s,
+                    "evidence": {
+                        "message_indices": item.get("evidence", {}).get("message_indices", []),
+                        "quotes": item.get("evidence", {}).get("quotes", []),
+                    },
+                    "rewrite_if_missing": item.get("rewrite_if_missing", ""),
+                })
+            required = c.get("required_to_pass") or 0
+            passed = bool(cat_score >= required) if required else True
+            total += cat_score
+            out_categories.append({
+                "category_id": c["category_id"],
+                "name": c["name"],
+                "score": cat_score,
+                "required_to_pass": required,
+                "passed": passed,
+                "criteria": crit_out,
+            })
+
+        overall = data.get("overall") or {}
+        overall_out = {
+            "total_score": int(overall.get("total_score", total)),
+            "passed": bool(overall.get("passed", all(cat["passed"] for cat in out_categories))),
+        }
+
+        return jsonify({"categories": out_categories, "overall": overall_out}), 200
+
+    except requests.HTTPError as http_err:
+        try:
+            return jsonify({"message": "OpenAI error", "details": http_err.response.json()}), http_err.response.status_code
+        except Exception:
+            return jsonify({"message": f"OpenAI error: {http_err}"}), 500
+    except Exception as e:
+        logger.exception(f"rubric_assessment_api failed: {e}")
+        return jsonify({"message": "Internal server error"}), 500
+
+# ──────────────────────────────────────────────────────────────
+# Legacy simple rubric (scenario-level questions)
+# ──────────────────────────────────────────────────────────────
 @openai_assistant_bp.route(
     "/scenarios/<int:activity_id>/rubric_responses",
     methods=["POST"],
@@ -431,6 +666,9 @@ def rubric_responses_api(current_user, activity_id: int):
         logger.exception(f"rubric_responses failed: {e}")
         return jsonify({"message": "Internal server error"}), 500
 
+# ──────────────────────────────────────────────────────────────
+# Misc utility route
+# ──────────────────────────────────────────────────────────────
 @openai_assistant_bp.route("/context/preview", methods=["GET"])
 @token_required
 def preview_context(current_user):
