@@ -314,29 +314,32 @@ def run_status(current_user, run_id: str):
 )
 @token_required
 def rubric_responses_api(current_user, activity_id: int):
-
     """
-    Body: { "messages": [ {role, message, created_at?}, ... ] }
+    Body: {
+      "messages": [ {role, message, created_at?}, ... ],
+      "scenario_id": <optional AssistantScenario.id>
+    }
     Uses the activity's linked character (AssistantScenario) to pull rubric questions,
-    and asks OpenAI to evaluate the transcript. Returns { evaluations: [...] }.
+    or the scenario_id from the body, and asks OpenAI to evaluate the transcript.
+    Returns { evaluations: [...] }.
     """
     try:
         body = request.get_json(force=True) or {}
         convo = body.get("messages", [])
         scenario_id = body.get("scenario_id")
 
-       # Resolve scenario either from the body or from activity.character_id
-activity: Activity | None = Activity.query.get(activity_id)
-scenario: AssistantScenario | None = None
+        # Resolve scenario either from the body or from activity.character_id
+        activity: Activity | None = Activity.query.get(activity_id)
+        scenario: AssistantScenario | None = None
 
-if scenario_id:
-    scenario = AssistantScenario.query.get(scenario_id)
+        if scenario_id:
+            scenario = AssistantScenario.query.get(scenario_id)
 
-if not scenario and activity and getattr(activity, "character_id", None):
-    scenario = AssistantScenario.query.get(activity.character_id)
+        if not scenario and activity and getattr(activity, "character_id", None):
+            scenario = AssistantScenario.query.get(activity.character_id)
 
-if not scenario:
-    return jsonify({"message": "Scenario not found (provide scenario_id in body or link activity.character_id)"}), 404
+        if not scenario:
+            return jsonify({"message": "Scenario not found (provide scenario_id in body or link activity.character_id)"}), 404
 
         # Pull rubric questions
         rubric_items = []
@@ -427,7 +430,6 @@ if not scenario:
     except Exception as e:
         logger.exception(f"rubric_responses failed: {e}")
         return jsonify({"message": "Internal server error"}), 500
-
 
 @openai_assistant_bp.route("/context/preview", methods=["GET"])
 @token_required
