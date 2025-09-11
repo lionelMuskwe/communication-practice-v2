@@ -14,6 +14,7 @@ import {
   runThread,
   getRunStatus,
   get, // generic GET
+  post, // new
 } from '../../services/apiService';
 
 const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedActivityId }) => {
@@ -193,17 +194,20 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
   };
 
   // Assessment dialog (unchanged API path for now)
-  const openDialog = async () => {
-    try {
-      const payload = { messages };
-      const rubricsRes = await get(`/scenarios/${selectedActivityId}/rubric_responses`, payload);
-      if (rubricsRes.status === 200) {
-        setResultsRubrics(rubricsRes.data.evaluations || []);
-        setDialogOpen(true);
-      }
-    } catch { /* ignore */ }
-  };
+const openDialog = async () => {
+   try {
+     const cleaned = messages.map(({ role, message, created_at }) => ({ role, message, created_at }));
+   const idForEndpoint = selectedAssistantID ?? selectedActivityId;
 
+     const rubricsRes = await post(`/scenarios/${idForEndpoint}/rubric_responses`, { messages: cleaned });
+     if (rubricsRes.status === 200) {
+       setResultsRubrics(rubricsRes.data.evaluations || []);
+       setDialogOpen(true);
+     }
+   } catch (err) {
+      console.error('Rubric fetch failed:', err);
+   }
+ };
   return (
     <Box>
       <Grid container component={Paper} sx={{ width: '100%' }}>
