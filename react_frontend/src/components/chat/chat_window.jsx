@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Grid, Paper, TextField, Typography, List, ListItem, ListItemText, Divider,
-  Avatar, Fab, Button, Dialog, DialogTitle, DialogContent, DialogActions, IconButton
+  Avatar, Fab, Button, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, CircularProgress
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import SendIcon from '@mui/icons-material/Send';
@@ -13,8 +13,8 @@ import {
   addMessage,
   runThread,
   getRunStatus,
-  get,   // generic GET
-  post,  // generic POST
+  get,                 // generic GET
+  rubricAssessment,    // NEW helper -> POST /activities/:id/rubric_assessment
 } from '../../services/apiService';
 
 const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedActivityId }) => {
@@ -22,10 +22,14 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
   const [messages, setMessages] = useState([]); // ALWAYS oldest -> newest
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [resultsRubrics, setResultsRubrics] = useState([]);
+
+  // Holds either the new {categories, overall} object or (legacy) {evaluations:[...]}
+  const [resultsRubrics, setResultsRubrics] = useState(null);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState('');
+  const [isAssessing, setIsAssessing] = useState(false);
 
   const recognitionRef = useRef(null);
   const endOfMessagesRef = useRef(null);
@@ -193,25 +197,30 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
     }
   };
 
-  // Assessment dialog — POST to activity endpoint, include scenario_id in body
+  // Assessment dialog — POST to the NEW activity endpoint, include scenario_id in body
   const openDialog = async () => {
     try {
+      setIsAssessing(true);
+
       const cleaned = messages.map(({ role, message, created_at }) => ({ role, message, created_at }));
 
-      const rubricsRes = await post(
-        `/scenarios/${selectedActivityId}/rubric_responses`,
-        {
-          messages: cleaned,
-          scenario_id: selectedAssistantID, // <-- important: pass the character id here
-        }
-      );
+      // New endpoint: per-category evaluation
+      const res = await rubricAssessment({
+        activity_id: selectedActivityId,
+        scenario_id: selectedAssistantID, // character used in this chat
+        messages: cleaned,
+      });
 
-      if (rubricsRes.status === 200) {
-        setResultsRubrics(rubricsRes.data.evaluations || []);
+      if (res.status === 200) {
+        // New payload shape: { categories: [...], overall: {...} }
+        // Keep backward compat by also exposing .evaluations to the dialog.
+        setResultsRubrics(res.data);
         setDialogOpen(true);
       }
     } catch (err) {
       console.error('Rubric fetch failed:', err);
+    } finally {
+      setIsAssessing(false);
     }
   };
 
@@ -227,7 +236,7 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
             <Typography sx={{ pl: 2 }}>{scenarioName}</Typography>
           </Box>
           <Button onClick={openDialog} variant="contained" sx={{ backgroundColor: '#1976d2', color: 'white' }}>
-            GPT Assessment
+            {isAssessing ? <CircularProgress size={20} sx={{ color: 'white' }} /> : 'GPT Assessment'}
           </Button>
         </Grid>
         <Divider sx={{ width: '100%' }} />
@@ -325,7 +334,12 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth>
         <DialogTitle>GPT Assessment</DialogTitle>
         <DialogContent>
-          <ChatResultsDialog evaluations={resultsRubrics} messages={messages} />
+          {/* Pass both props: new 'assessment' and legacy 'evaluations' for compatibility */}
+          <ChatResultsDialog
+            assessment={resultsRubrics}                           // { categories, overall }
+            evaluations={resultsRubrics?.evaluations || []}        // legacy shape if needed
+            messages={messages}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
