@@ -19,36 +19,25 @@ User = get_user_model()
 # Authentication Views (Login, Register)
 # ============================================================================
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([AllowAny])
 def login_view(request):
-    """
-    User login endpoint.
-    Returns JWT tokens and user information (Flask compatibility).
-
-    POST /api/auth/login/
-    Body: {"email": "user@example.com", "password": "password"}
-    Response: {"token": "...", "role": "student", "name": "username"}
-    """
     serializer = LoginSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(
-            {"message": "Invalid credentials"},
-            status=status.HTTP_401_UNAUTHORIZED
-        )
+    serializer.is_valid(raise_exception=True)
 
-    user = serializer.validated_data['user']
+    user = serializer.validated_data["user"]
 
-    # Generate JWT tokens
-    refresh = RefreshToken.for_user(user)
+    refresh_token = RefreshToken.for_user(user)
 
-    return Response({
-        "token": str(refresh.access_token),
-        "refresh": str(refresh),
-        "role": user.role,
-        "name": user.username
-    }, status=status.HTTP_200_OK)
-
+    return Response(
+        {
+            "token": str(refresh_token.access_token),
+            "refresh": str(refresh_token),
+            "role": user.role,
+            "name": user.username,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 @api_view(['POST'])
 @permission_classes([AllowAny])

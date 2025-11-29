@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-# from passlib.hash import pbkdf2_sha256
+from rest_framework.exceptions import AuthenticationFailed
 
 User = get_user_model()
 
@@ -68,37 +68,40 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    """
-    Serializer for user login validation.
-    """
     email = serializers.EmailField(required=True)
     password = serializers.CharField(
         write_only=True,
         required=True,
-        style={'input_type': 'password'}
+        style={"input_type": "password"},
+        trim_whitespace=False,
     )
 
+    default_error_messages = {
+        "invalid_credentials": "Invalid credentials",
+        "inactive": "User account is disabled",
+    }
+
     def validate(self, attrs):
-        """
-        Validate credentials using Passlib for Flask compatibility.
-        """
-        email = attrs.get('email')
-        password = attrs.get('password')
+        email = attrs.get("email")
+        password = attrs.get("password")
+
+        # One generic error to avoid hinting whether email or password is wrong
+        generic_error_message = self.error_messages["invalid_credentials"]
 
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid credentials")
+            raise AuthenticationFailed(generic_error_message)
 
-        # Use Passlib to verify password (Flask compatibility)
-        if not pbkdf2_sha256.verify(password, user.password):
-            raise serializers.ValidationError("Invalid credentials")
+        if not user.check_password(password):
+            raise AuthenticationFailed(generic_error_message)
 
         if not user.is_active:
-            raise serializers.ValidationError("User account is disabled")
+            raise AuthenticationFailed(self.error_messages["inactive"])
 
-        attrs['user'] = user
+        attrs["user"] = user
         return attrs
+
 
 
 class UserListSerializer(serializers.ModelSerializer):
