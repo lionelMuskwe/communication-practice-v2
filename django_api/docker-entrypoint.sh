@@ -46,8 +46,9 @@ EOF
 echo "Applying database migrations..."
 python manage.py migrate --noinput
 
-# Collect static files (only in production)
-if [ "$DJANGO_ENV" = "production" ]; then
+
+# Only run collectstatic for the web process (gunicorn)
+if [ "$1" = "gunicorn" ]; then
     echo "Collecting static files..."
     python manage.py collectstatic --noinput --clear
 fi
