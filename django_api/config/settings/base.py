@@ -92,12 +92,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'medical_practice'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': read_secret('db_password', os.getenv('DB_PASSWORD', '')),
+        'NAME': os.getenv('POSTGRES_DB', 'medical_practice'),
+        'USER': os.getenv('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
-        'CONN_MAX_AGE': 600,  # Connection pooling
+        'CONN_MAX_AGE': 600, 
     }
 }
 
