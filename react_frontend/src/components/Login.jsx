@@ -42,11 +42,11 @@ const LoginPage = () => {
   // Login form submit
  const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
-      const response = await post('/login', { email, password });
+      const response = await post('/login/', { email, password });
       console.log('Login successful:', response.data);
-      
+
       // Assuming the response data contains user information and token
       const { token, role, user } = response.data;
 
