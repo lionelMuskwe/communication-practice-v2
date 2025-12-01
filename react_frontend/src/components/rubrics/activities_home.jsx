@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -32,11 +32,7 @@ const ActivitiesHome = () => {
   const [form, setForm] = useState({ id: null, pre_brief: '', character_id: '', categories: [] });
   const dispatch = useDispatch();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const activitiesRes = await get('/activities');
       const charactersRes = await get('/scenarios');
@@ -45,14 +41,18 @@ const ActivitiesHome = () => {
       setActivities(activitiesRes.data);
       setCharacters(charactersRes.data);
       setCategories(categoriesRes.data);
-          } catch (error) {
+    } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to fetch data', severity: 'error' }));
     }
-  };
+  }, [dispatch]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleSave = async () => {
     try {
-      await post('/activities', form);
+      await post('/activities/', form);
       dispatch(showSnackbar({ message: 'Activity saved', severity: 'success' }));
       setOpenDialog(false);
       fetchData();
@@ -63,7 +63,7 @@ const ActivitiesHome = () => {
 
   const handleDelete = async (id) => {
     try {
-      await del(`/activities/${id}`);
+      await del(`/activities/${id}/`);
       dispatch(showSnackbar({ message: 'Activity deleted', severity: 'success' }));
       fetchData();
     } catch (error) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -29,11 +29,7 @@ const RubricsHome = () => {
   const [categoryForm, setCategoryForm] = useState({ id: null, name: '', total_required_to_pass: 0 });
   const dispatch = useDispatch();
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const response = await get('/categories');
       const normalized = response.data.map(cat => ({
@@ -44,7 +40,11 @@ const RubricsHome = () => {
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load categories', severity: 'error' }));
     }
-  };
+  }, [dispatch]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const handleOpenCategoryDialog = (index = null) => {
     if (index !== null) {
@@ -58,7 +58,7 @@ const RubricsHome = () => {
 
   const handleSaveCategory = async () => {
     try {
-      await post('/categories', categoryForm);
+      await post('/categories/', categoryForm);
       setOpenCategoryDialog(false);
       fetchCategories();
       dispatch(showSnackbar({ message: 'Category saved successfully', severity: 'success' }));
@@ -69,7 +69,7 @@ const RubricsHome = () => {
 
   const handleDeleteCategory = async (index) => {
     try {
-      await del(`/categories/${categories[index].id}`);
+      await del(`/categories/${categories[index].id}/`);
       fetchCategories();
       dispatch(showSnackbar({ message: 'Category deleted', severity: 'success' }));
     } catch (error) {
@@ -80,7 +80,7 @@ const RubricsHome = () => {
   const handleOpenRubricDialog = async (index) => {
     try {
       const category = categories[index];
-      const response = await get(`/categories/${category.id}/rubrics`);
+      const response = await get(`/categories/${category.id}/rubrics/`);
       const updated = [...categories];
       updated[index].rubrics = response.data;
       setCategories(updated);
@@ -110,7 +110,7 @@ const RubricsHome = () => {
 
   const saveRubric = async (rubric) => {
     try {
-      await post('/rubrics', rubric);
+      await post('/rubrics/', rubric);
       fetchCategories();
       dispatch(showSnackbar({ message: 'Rubric saved successfully', severity: 'success' }));
     } catch (error) {
@@ -122,7 +122,7 @@ const RubricsHome = () => {
     const rubric = categories[currentCategoryIndex].rubrics[rubricIndex];
     if (rubric.id) {
       try {
-        await del(`/rubrics/${rubric.id}`);
+        await del(`/rubrics/${rubric.id}/`);
         dispatch(showSnackbar({ message: 'Rubric deleted', severity: 'success' }));
       } catch (error) {
         dispatch(showSnackbar({ message: 'Failed to delete rubric', severity: 'error' }));

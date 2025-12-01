@@ -30,8 +30,8 @@ const bubble = (isUser, highlight) => ({
 });
 
 export default function ChatResultsDialog({ assessment, messages }) {
-  // New payload fields
-  const cats = assessment?.categories || [];
+  // New payload fields - memoized to prevent unnecessary re-renders
+  const cats = useMemo(() => assessment?.categories || [], [assessment]);
   const overall = assessment?.overall || null;
 
   // Build a set of message indices (within the last 40) that were cited as evidence

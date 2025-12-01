@@ -1,4 +1,4 @@
-import React, { useReducer, useState, useEffect } from 'react';
+import React, { useReducer, useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -12,19 +12,16 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Chip,
-  Switch,
   Typography,
   Tooltip,
   Avatar,
-  Tabs, 
+  Tabs,
   Tab
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PersonIcon from '@mui/icons-material/Person';
-import CancelIcon from '@mui/icons-material/Cancel';
 import { DataGrid } from '@mui/x-data-grid';
 import { post, put, get, del } from '../../services/apiService'; // Ensure the correct path
 import { showSnackbar } from '../../features/snackbarSlice';
@@ -33,7 +30,7 @@ import './management.css'; // Ensure the CSS file path is correct
 
 
 
- 
+
 const initialState = {
   id: '',
   openid: '',
@@ -155,12 +152,12 @@ const Management = () => {
           <IconButton onClick={() => handleDelete(params.row.id)}>
             <DeleteIcon />
           </IconButton>
-         
+
         </>
       ),
     }
   ];
-  
+
   const [state, dispatch] = useReducer(reducer, initialState);
   const [open, setOpen] = useState(false);
   const [newQuestion, setNewQuestion] = useState('');
@@ -168,11 +165,7 @@ const Management = () => {
   const dispatch_global = useDispatch(); // Use Redux dispatch
   const [assistants, setAssistants] = useState([]);
 
-  useEffect(() => {
-    fetchAssistants();
-  }, []);
-
-  const fetchAssistants = async () => {
+  const fetchAssistants = useCallback(async () => {
     try {
       const response = await get('/scenarios');
       setAssistants(response.data);
@@ -182,7 +175,11 @@ const Management = () => {
         showSnackbar({ message: 'Failed to fetch assistants', severity: 'error' })
       );
     }
-  };
+  }, [dispatch_global]);
+
+  useEffect(() => {
+    fetchAssistants();
+  }, [fetchAssistants]);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -191,28 +188,9 @@ const Management = () => {
   const handleEdit = (id) => {
     const assistant = assistants.find((a) => a.id === id);
     if (assistant) {
-    
+
       dispatch({ type: 'Set_All', payload: assistant });
       setOpen(true);
-    }
-  };
-
-  const handleToggle = async (id) => {
-    const assistant = assistants.find((a) => a.id === id);
-    if (assistant) {
-      const endpoint = assistant.enable ? `/scenarios/${id}/disable` : `/scenarios/${id}/enable`;
-      try {
-        await put(endpoint);
-        dispatch_global(
-          showSnackbar({ message: 'Assistant updated successfully', severity: 'success' })
-        );
-        fetchAssistants(); // Fetch updated list of assistants
-      } catch (error) {
-        console.error('Error toggling assistant:', error);
-        dispatch_global(
-          showSnackbar({ message: 'Failed to update assistant', severity: 'error' })
-        );
-      }
     }
   };
 
@@ -238,20 +216,6 @@ const Management = () => {
     dispatch({ type: 'RESET_FORM' });
   };
 
-  const handleAddQuestion = (e) => {
-    if (e.key === 'Enter' && newQuestion.trim() !== '') {
-      dispatch({ type: 'ADD_RUBRIC', payload: newQuestion });
-      setNewQuestion('');
-    }
-  };
-
-  const handleAddTag = (e) => {
-    if (e.key === 'Enter' && newTag.trim() !== '') {
-      dispatch({ type: 'ADD_TAG', payload: newTag });
-      setNewTag('');
-    }
-  };
-
   const handleSubmit = async () => {
     const payload = {
       id: state.id,
@@ -266,9 +230,9 @@ const Management = () => {
 
     try {
       if (state.id) {
-        await put(`/scenarios/${state.id}`, payload);
+        await put(`/scenarios/${state.id}/`, payload);
       } else {
-        await post('/scenarios', payload);
+        await post('/scenarios/', payload);
       }
       dispatch_global(showSnackbar({ message: 'Task done successfully', severity: 'success' }));
       handleClose();
@@ -299,7 +263,7 @@ const Management = () => {
         pageSize={10}
         rowsPerPageOptions={[5, 10, 20]}
         getRowId={(row) => row.id}
-        disableColumnMenu 
+        disableColumnMenu
         disableSelectionOnClick
       />
     </Box>
@@ -339,7 +303,7 @@ const Management = () => {
                             >
                               <PersonIcon />
                             </Avatar>
-          
+
                           </Box>
                         </MenuItem>
                       ))}

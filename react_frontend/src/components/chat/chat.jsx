@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
 import ChatWindow from './chat_window';
 import { get } from '../../services/apiService';
@@ -12,11 +12,7 @@ const ChatPage = () => {
   const [activities, setActivities] = useState([]);
   const [characters, setCharacters] = useState([]);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const activitiesRes = await get('/activities');
       const charactersRes = await get('/scenarios');
@@ -25,7 +21,11 @@ const ChatPage = () => {
     } catch (error) {
       dispatch_global(showSnackbar({ message: 'Failed to load data', severity: 'error' }));
     }
-  };
+  }, [dispatch_global]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleActivitySelect = (activity) => {
 

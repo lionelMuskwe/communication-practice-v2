@@ -223,7 +223,7 @@ export const postLong = (url, data, timeoutMs = 120000) =>
 // ─────────────────────────────────────────────────────────────
 
 // Assistants API — threads
-export const createThread = () => post('/threads', {});
+export const createThread = () => post('/threads/', {});
 
 export const addMessage = ({ thread_id, role = 'user', content = '' }) =>
   post(`/threads/${encodeURIComponent(thread_id)}/messages`, { role, content });
@@ -231,7 +231,7 @@ export const addMessage = ({ thread_id, role = 'user', content = '' }) =>
 // Critical: always send BOTH activity_id and scenario_id so the backend
 // can build the full context and pass it as additional_instructions.
 export const runThread = ({ thread_id, activity_id, scenario_id, model }) =>
-  post('/threads/run', {
+  post('/threads/run/', {
     thread_id,
     activity_id, // selected Activity (pre-brief + categories)
     scenario_id, // selected Character/Scenario that owns tags/rubrics/voice
@@ -239,11 +239,11 @@ export const runThread = ({ thread_id, activity_id, scenario_id, model }) =>
   });
 
 export const getRunStatus = ({ run_id, thread_id }) =>
-  get(`/runs/${encodeURIComponent(run_id)}/status`, { thread_id });
+  get(`/runs/${encodeURIComponent(run_id)}/status/`, { thread_id });
 
 // Debug: preview exactly what the server will send to OpenAI
 export const previewContext = ({ activity_id, scenario_id }) =>
-  get('/context/preview', { activity_id, scenario_id });
+  get('/context/preview/', { activity_id, scenario_id });
 
 // Rubric assessment (activity → categories/subcategories) — long running
 export const rubricAssessment = ({
@@ -253,7 +253,7 @@ export const rubricAssessment = ({
   timeoutMs = 120000,
 }) =>
   postLong(
-    `/activities/${encodeURIComponent(activity_id)}/rubric_assessment`,
+    `/activities/${encodeURIComponent(activity_id)}/rubric_assessment/`,
     { messages, scenario_id },
     timeoutMs
   );
@@ -266,7 +266,7 @@ export const rubricResponses = ({
   timeoutMs = 60000,
 }) =>
   post(
-    `/scenarios/${encodeURIComponent(activity_id)}/rubric_responses`,
+    `/scenarios/${encodeURIComponent(activity_id)}/rubric_responses/`,
     { messages, scenario_id },
     { timeout: timeoutMs }
   );

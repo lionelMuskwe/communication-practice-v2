@@ -36,7 +36,7 @@ const Signup = () => {
     }
 
     try {
-      await post('/api/create_users', {    // <-- Updated to match Flask API
+      await post('/api/create_users/', {    // <-- Updated to match Flask API
         username,
         email,
         password,
