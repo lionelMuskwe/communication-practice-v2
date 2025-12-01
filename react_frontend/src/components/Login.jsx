@@ -44,7 +44,7 @@ const LoginPage = () => {
     e.preventDefault();
 
     try {
-      const response = await post('/login', { email, password });
+      const response = await post('/login/', { email, password });
       console.log('Login successful:', response.data);
 
       // Django JWT response: { token, refresh, role, name }
