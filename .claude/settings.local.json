@@ -6,7 +6,13 @@
       "Bash(venvScriptsactivate)",
       "Bash(pip install:*)",
       "Bash(venv/Scripts/pip install:*)",
-      "Bash(venv/Scripts/django-admin startproject config .)"
+      "Bash(venv/Scripts/django-admin startproject config .)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker-compose ps:*)"
     ],
     "deny": [],
     "ask": []
