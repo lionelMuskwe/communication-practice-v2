@@ -1,0 +1,174 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: medical_practice_db_dev
+    environment:
+      POSTGRES_DB: ${DB_NAME:-medical_practice}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # Redis Cache & Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: medical_practice_redis_dev
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_dev:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # Django Web Application (Development Mode)
+  web:
+    build:
+      context: ./django_api
+      dockerfile: Dockerfile
+      target: development  # Use multi-stage build if available
+    container_name: medical_practice_web_dev
+    # Use Django's development server for auto-reload
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-medical_practice}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - OPENAI_KEY=${OPENAI_KEY}
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - POSTGRES_DB=${DB_NAME:-medical_practice}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+    volumes:
+      # Mount source code for live reloading
+      - ./django_api:/app
+      # Exclude compiled Python files (performance optimization)
+      - /app/__pycache__
+      - /app/*/__pycache__
+      - /app/*/*/__pycache__
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+    # Dev tip: Use stdin_open and tty for interactive debugging (pdb)
+    stdin_open: true
+    tty: true
+
+  # Celery Worker (Development Mode)
+  celery_worker:
+    build:
+      context: ./django_api
+      dockerfile: Dockerfile
+    container_name: medical_practice_celery_worker_dev
+    # Use watchdog for auto-reload on code changes
+    command: watchmedo auto-restart --directory=/app --pattern='*.py' --recursive -- celery -A config.celery:app worker --loglevel=debug --concurrency=2
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-medical_practice}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - OPENAI_KEY=${OPENAI_KEY}
+    volumes:
+      - ./django_api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # Celery Beat (Development Mode)
+  celery_beat:
+    build:
+      context: ./django_api
+      dockerfile: Dockerfile
+    container_name: medical_practice_celery_beat_dev
+    command: celery -A config.celery:app beat --loglevel=debug --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-medical_practice}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - OPENAI_KEY=${OPENAI_KEY}
+    volumes:
+      - ./django_api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # React Frontend (Development Mode with Hot Reload)
+  frontend:
+    build:
+      context: ./react_frontend
+      dockerfile: Dockerfile.dev
+    container_name: react_frontend_dev
+    command: npm start
+    environment:
+      # React dev server settings
+      - CHOKIDAR_USEPOLLING=true  # Enable polling for Windows/Docker file watching
+      - WATCHPACK_POLLING=true
+      - FAST_REFRESH=true
+      - WDS_SOCKET_PORT=3000
+      - REACT_APP_API_URL=http://localhost:8000/api
+      - REACT_APP_API_BASE=http://localhost:8000/api
+    volumes:
+      # Mount source code for hot reload
+      - ./react_frontend:/app
+      # Use anonymous volumes for node_modules (don't override container's)
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - web
+    networks:
+      - app_network
+    stdin_open: true  # Keep STDIN open (required for React dev server)
+    tty: true
+
+volumes:
+  postgres_data_dev:
+    driver: local
+  redis_data_dev:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge

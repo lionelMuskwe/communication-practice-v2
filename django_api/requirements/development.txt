@@ -4,6 +4,7 @@
 django-debug-toolbar==4.2.0
 ipython==8.20.0
 ipdb==0.13.13
+watchdog[watchmedo]==4.0.0  # Auto-reload for Celery workers
 
 # Code quality
 black==24.1.1
