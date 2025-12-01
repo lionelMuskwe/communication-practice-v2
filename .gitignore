@@ -5,3 +5,32 @@ __pycache__/
 *.pem
 docker-compose.yml
 .idea/
+# Python virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Python compiled files
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+/staticfiles/
+/mediafiles/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+.DS_Store
