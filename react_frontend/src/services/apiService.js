@@ -2,7 +2,7 @@
 import axios from 'axios';
 import store from '../store';
 import { createBrowserHistory } from 'history';
-import { logout } from '../features/authSlice';
+import { logout, updateToken } from '../features/authSlice';
 import { showSnackbar } from '../features/snackbarSlice';
 
 // Decide the API base once, with sensible production defaults.
@@ -59,16 +59,109 @@ apiClient.interceptors.request.use(
 );
 
 // ─────────────────────────────────────────────────────────────
+// Token refresh helper
+// ─────────────────────────────────────────────────────────────
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+const subscribeTokenRefresh = (cb) => {
+  refreshSubscribers.push(cb);
+};
+
+const onRefreshed = (token) => {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+};
+
+const refreshAccessToken = async () => {
+  const state = store.getState();
+  const refreshToken = state?.auth?.refresh;
+
+  if (!refreshToken) {
+    throw new Error('No refresh token available');
+  }
+
+  try {
+    const response = await axios.post(`${API_BASE_URL}/token/refresh`, {
+      refresh: refreshToken,
+    });
+
+    const { token } = response.data;
+    store.dispatch(updateToken({ token }));
+    return token;
+  } catch (error) {
+    store.dispatch(logout());
+    throw error;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
 // Response interceptor: handle 401s, rate limits, timeouts, etc.
 // ─────────────────────────────────────────────────────────────
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error?.response?.status;
     const code = error?.code;
     const reqUrl = error?.config?.url || '';
+    const originalRequest = error?.config;
 
-    if (status === 401) {
+    if (status === 401 && !originalRequest._retry) {
+      // Avoid retry loop for refresh endpoint itself
+      if (reqUrl.includes('/token/refresh')) {
+        store.dispatch(logout());
+        store.dispatch(
+          showSnackbar({
+            message: 'Session expired. Please log in again.',
+            severity: 'error',
+          })
+        );
+        try {
+          history.push('/login');
+        } catch {
+          window.location.assign('/login');
+        }
+        return Promise.reject(error);
+      }
+
+      if (isRefreshing) {
+        // Queue this request until token is refreshed
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(apiClient(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const newToken = await refreshAccessToken();
+        isRefreshing = false;
+        onRefreshed(newToken);
+
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        isRefreshing = false;
+        store.dispatch(logout());
+        store.dispatch(
+          showSnackbar({
+            message: 'Session expired. Please log in again.',
+            severity: 'error',
+          })
+        );
+        try {
+          history.push('/login');
+        } catch {
+          window.location.assign('/login');
+        }
+        return Promise.reject(refreshError);
+      }
+    } else if (status === 401) {
+      // Already retried, logout
       store.dispatch(logout());
       store.dispatch(
         showSnackbar({

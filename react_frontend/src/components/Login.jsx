@@ -42,16 +42,16 @@ const LoginPage = () => {
   // Login form submit
  const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       const response = await post('/login', { email, password });
       console.log('Login successful:', response.data);
-      
-      // Assuming the response data contains user information and token
-      const { token, role, user } = response.data;
+
+      // Django JWT response: { token, refresh, role, name }
+      const { token, refresh, role, name } = response.data;
 
       // Dispatch the login action with user data
-      dispatch(login({ user, token, role }));
+      dispatch(login({ token, refresh, role, name }));
 
       // Navigate to the home page
       navigate('/home');
