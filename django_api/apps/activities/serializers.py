@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import Activity
 from apps.assessments.serializers import CategoryListSerializer
+from apps.scenarios.models import AssistantScenario
+
 
 
 class ActivityListSerializer(serializers.ModelSerializer):
@@ -58,34 +60,32 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
         allow_empty=True
     )
 
+    character_id = serializers.PrimaryKeyRelatedField(
+        queryset=AssistantScenario.objects.all(),
+        source='character'
+    )
+
     class Meta:
         model = Activity
         fields = ['id', 'pre_brief', 'character_id', 'categories']
         read_only_fields = ['id']
 
     def validate_pre_brief(self, value):
-        """Ensure pre_brief is not empty."""
-        print(f"\n*******\n*******\n******* Validate character pre brief \n*******\n*******\n******* ")
+        print("\n******* Validate pre_brief *******\n")
         if not value or not value.strip():
             raise serializers.ValidationError("Pre-brief cannot be empty.")
         return value
 
-    def validate_character_id(self, value):
-        """Ensure character (scenario) exists."""
-        print(f"\n*******\n*******\n******* Validate character id ran \n*******\n*******\n******* ")
-        from apps.scenarios.models import AssistantScenario
-        if not AssistantScenario.objects.filter(id=value).exists():
-            raise serializers.ValidationError("Character not found.")
-
-        scenario = AssistantScenario.objects.filter(id=value).exists()
-        print(f"************************\n\n The character '{value}'={scenario} exists \n\n")
-        return value
+    # You can drop validate_character_id now, because the PrimaryKeyRelatedField
+    # already ensures the character exists and will raise a 400 if not.
 
     def validate_categories(self, value):
         """Ensure all category IDs exist."""
         from apps.assessments.models import Category
         if value:
-            existing_ids = set(Category.objects.filter(id__in=value).values_list('id', flat=True))
+            existing_ids = set(
+                Category.objects.filter(id__in=value).values_list('id', flat=True)
+            )
             invalid_ids = set(value) - existing_ids
             if invalid_ids:
                 raise serializers.ValidationError(f"Categories not found: {invalid_ids}")
@@ -93,9 +93,11 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """Create activity with M2M category relationships."""
-
         print(f"************************\n\n {validated_data} \n\n")
         category_ids = validated_data.pop('categories', [])
+
+        # validated_data now contains:
+        # {'pre_brief': 'test 123', 'character': <AssistantScenario ...>}
         activity = Activity.objects.create(**validated_data)
 
         if category_ids:
@@ -109,12 +111,10 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
         """Update activity including M2M category relationships."""
         category_ids = validated_data.pop('categories', None)
 
-        # Update scalar fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Update M2M relationships if provided
         if category_ids is not None:
             from apps.assessments.models import Category
             categories = Category.objects.filter(id__in=category_ids)

@@ -68,16 +68,16 @@ class SubCategoryCreateUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer for creating/updating subcategories.
     """
+
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(),
+        source="category"
+    )
+
     class Meta:
         model = SubCategory
         fields = ['id', 'name', 'marking_instructions', 'category_id']
         read_only_fields = ['id']
-
-    def validate_category_id(self, value):
-        """Ensure category exists."""
-        if not Category.objects.filter(id=value).exists():
-            raise serializers.ValidationError("Category not found.")
-        return value
 
 
 class RubricQuestionSerializer(serializers.ModelSerializer):
