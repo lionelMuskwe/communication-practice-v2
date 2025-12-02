@@ -15,6 +15,8 @@ from .serializers import (
     RubricAssessmentRequestSerializer,
     SimpleRubricRequestSerializer
 )
+from rest_framework.views import APIView
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,93 +57,107 @@ def create_thread(request):
         )
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def add_message(request, thread_id):
+class ThreadMessagesView(APIView):
     """
-    Add a message to a thread.
+    Manage messages for a given OpenAI thread.
 
-    POST /api/threads/<thread_id>/messages/
-    Body: {"role": "user", "content": "Hello"}
+    - GET  /api/threads/<thread_id>/messages/  -> list messages
+    - POST /api/threads/<thread_id>/messages/  -> add a message
     """
-    serializer = MessageCreateSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        data = ThreadService.create_message(
-            thread_id=thread_id,
-            role=serializer.validated_data['role'],
-            content=serializer.validated_data['content']
-        )
-        return Response(data, status=status.HTTP_201_CREATED)
-    except requests.HTTPError as e:
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, thread_id: str):
+        """
+        Add a message to a thread.
+
+        POST /api/threads/<thread_id>/messages/
+        Body: {"role": "user", "content": "Hello"}
+        """
+        serializer = MessageCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            details = e.response.json()
-        except Exception:
-            details = str(e)
-        return Response(
-            {"message": "OpenAI error", "details": details},
-            status=e.response.status_code if hasattr(e, 'response') else 500
-        )
-    except Exception as e:
-        logger.error(f"Add message failed: {e}")
-        return Response(
-            {"message": "Internal server error"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+            data = ThreadService.create_message(
+                thread_id=thread_id,
+                role=serializer.validated_data["role"],
+                content=serializer.validated_data["content"],
+            )
+            return Response(data, status=status.HTTP_201_CREATED)
 
+        except requests.HTTPError as exc:
+            try:
+                details = exc.response.json()
+            except Exception:
+                details = str(exc)
+            return Response(
+                {"message": "OpenAI error", "details": details},
+                status=exc.response.status_code
+                if getattr(exc, "response", None) is not None
+                else status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as exc:
+            logger.error(f"Add message failed: {exc}")
+            return Response(
+                {"message": "Internal server error"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def list_messages(request, thread_id):
-    """
-    List all messages in a thread (oldest-first, Flask compatibility).
+    def get(self, request, thread_id: str):
+        """
+        List all messages in a thread (oldest first for UI).
 
-    GET /api/threads/<thread_id>/messages/
-    Response: [{"role": "user", "message": "...", "created_at": 123456789}, ...]
-    """
-    try:
-        data = ThreadService.list_messages(thread_id)
-        items = []
-
-        # OpenAI returns newest-first; reverse to oldest-first for UI
-        for msg in reversed(data.get("data", [])):
-            role = msg.get("role")
-            timestamp = msg.get("created_at")
-            text = ""
-
-            # Extract text from content blocks
-            for block in msg.get("content", []):
-                if block.get("type") == "text":
-                    text += block["text"]["value"]
-
-            # Convert timestamp to milliseconds if needed
-            created_at = timestamp * 1000 if isinstance(timestamp, int) else timestamp
-
-            items.append({
-                "role": role,
-                "message": text,
-                "created_at": created_at
-            })
-
-        return Response(items, status=status.HTTP_200_OK)
-
-    except requests.HTTPError as e:
+        GET /api/threads/<thread_id>/messages/
+        Response: [{"role": "user", "message": "...", "created_at": 123456789}, ...]
+        """
         try:
-            details = e.response.json()
-        except Exception:
-            details = str(e)
-        return Response(
-            {"message": "OpenAI error", "details": details},
-            status=e.response.status_code if hasattr(e, 'response') else 500
-        )
-    except Exception as e:
-        logger.error(f"List messages failed: {e}")
-        return Response(
-            {"message": "Internal server error"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+            data = ThreadService.list_messages(thread_id)
+            items = []
+
+            # OpenAI returns newest first; reverse to oldest first for UI
+            for message in reversed(data.get("data", [])):
+                role = message.get("role")
+                timestamp = message.get("created_at")
+                text = ""
+
+                # Extract text from content blocks
+                for block in message.get("content", []):
+                    if block.get("type") == "text":
+                        text += block["text"]["value"]
+
+                # Convert timestamp to milliseconds if needed
+                created_at = (
+                    timestamp * 1000 if isinstance(timestamp, int) else timestamp
+                )
+
+                items.append(
+                    {
+                        "role": role,
+                        "message": text,
+                        "created_at": created_at,
+                    }
+                )
+
+            return Response(items, status=status.HTTP_200_OK)
+
+        except requests.HTTPError as exc:
+            try:
+                details = exc.response.json()
+            except Exception:
+                details = str(exc)
+            return Response(
+                {"message": "OpenAI error", "details": details},
+                status=exc.response.status_code
+                if getattr(exc, "response", None) is not None
+                else status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as exc:
+            logger.error(f"List messages failed: {exc}")
+            return Response(
+                {"message": "Internal server error"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 # ============================================================================

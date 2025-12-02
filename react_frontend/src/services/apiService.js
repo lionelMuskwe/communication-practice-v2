@@ -226,7 +226,7 @@ export const postLong = (url, data, timeoutMs = 120000) =>
 export const createThread = () => post('/threads/', {});
 
 export const addMessage = ({ thread_id, role = 'user', content = '' }) =>
-  post(`/threads/${encodeURIComponent(thread_id)}/messages`, { role, content });
+  post(`/threads/${encodeURIComponent(thread_id)}/messages/`, { role, content });
 
 // Critical: always send BOTH activity_id and scenario_id so the backend
 // can build the full context and pass it as additional_instructions.

@@ -7,6 +7,7 @@ import logging
 import requests
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
+
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def read_secret_file(name: str) -> Optional[str]:
 def get_openai_key() -> str:
     """Get OpenAI API key from settings, env, or secrets."""
     return (
-        settings.OPENAI_API_KEY
+        getattr(settings, "OPENAI_API_KEY", None)
         or os.getenv("OPENAI_KEY")
         or read_secret_file("openai_key")
         or ""
@@ -45,9 +46,9 @@ def get_openai_model() -> str:
     3. Default fallback
     """
     return (
-        settings.OPENAI_MODEL_TUNED
+        getattr(settings, "OPENAI_MODEL_TUNED", None)
         or read_secret_file("openai_model_tuned")
-        or settings.OPENAI_MODEL
+        or getattr(settings, "OPENAI_MODEL", None)
         or read_secret_file("openai_model")
         or os.getenv("OPENAI_MODEL")
         or "gpt-4o-mini-2024-07-18"
@@ -94,7 +95,7 @@ class AssistantService:
             f"COMMUNICATION PREFERENCES: {communication_preferences}\n\n"
             f"STRICT INSTRUCTIONS:\n"
             f"1) Stick ONLY to details provided above. Do NOT invent new symptoms, history, medications, allergies, or social details.\n"
-            f"2) If asked about information that is not specified, say you don't know / don't recall, or ask a brief clarifying question.\n"
+            f"2) If asked about information that is not specified, say you do not know / do not recall, or ask a brief clarifying question.\n"
             f"3) Never reveal, suggest, or hint at a medical DIAGNOSIS unless explicitly asked. Answer from a patient's perspective "
             f"using everyday language about what you feel, not clinical labels.\n"
             f"4) Answer directly and clearly to the clinician's question. Default to 1–3 concise sentences. Be natural and conversational "
@@ -126,7 +127,7 @@ class AssistantService:
                 f"{OPENAI_API}/assistants",
                 headers=get_headers(),
                 json=payload,
-                timeout=30
+                timeout=30,
             )
             response.raise_for_status()
 
@@ -134,17 +135,17 @@ class AssistantService:
             logger.info(f"Created OpenAI assistant: {assistant_id}")
             return assistant_id, None, 200
 
-        except requests.HTTPError as e:
+        except requests.HTTPError as exc:
             try:
-                error_details = e.response.json()
+                error_details = exc.response.json()
             except Exception:
-                error_details = str(e)
+                error_details = str(exc)
             logger.error(f"Assistant create failed: {error_details}")
-            return None, error_details, e.response.status_code
+            return None, error_details, exc.response.status_code
 
-        except Exception as e:
-            logger.error(f"Assistant create failed: {e}")
-            return None, str(e), 500
+        except Exception as exc:
+            logger.error(f"Assistant create failed: {exc}")
+            return None, str(exc), 500
 
     @staticmethod
     def delete_assistant(assistant_id: str) -> bool:
@@ -158,7 +159,7 @@ class AssistantService:
             response = requests.delete(
                 f"{OPENAI_API}/assistants/{assistant_id}",
                 headers=get_headers(),
-                timeout=30
+                timeout=30,
             )
 
             if response.status_code in (200, 204):
@@ -170,11 +171,13 @@ class AssistantService:
                         return True
                 return True
 
-            logger.error(f"Assistant delete returned {response.status_code}: {response.text}")
+            logger.error(
+                f"Assistant delete returned {response.status_code}: {response.text}"
+            )
             return False
 
-        except Exception as e:
-            logger.error(f"Assistant delete failed: {e}")
+        except Exception as exc:
+            logger.error(f"Assistant delete failed: {exc}")
             return False
 
 
@@ -192,7 +195,7 @@ class ThreadService:
             f"{OPENAI_API}/threads",
             headers=get_headers(),
             json={},
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()
@@ -205,7 +208,7 @@ class ThreadService:
             f"{OPENAI_API}/threads/{thread_id}/messages",
             headers=get_headers(),
             json=payload,
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()
@@ -216,7 +219,7 @@ class ThreadService:
         response = requests.get(
             f"{OPENAI_API}/threads/{thread_id}/messages",
             headers=get_headers(),
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()
@@ -230,10 +233,10 @@ class RunService:
         thread_id: str,
         assistant_id: str,
         additional_instructions: str,
-        model_override: Optional[str] = None
+        model_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a run (execute conversation with assistant)."""
-        payload = {
+        payload: Dict[str, Any] = {
             "assistant_id": assistant_id,
             "additional_instructions": additional_instructions,
         }
@@ -244,7 +247,7 @@ class RunService:
             f"{OPENAI_API}/threads/{thread_id}/runs",
             headers=get_headers(),
             json=payload,
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()
@@ -255,7 +258,7 @@ class RunService:
         response = requests.get(
             f"{OPENAI_API}/threads/{thread_id}/runs/{run_id}",
             headers=get_headers(),
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()
@@ -265,7 +268,7 @@ class RunService:
 # Context Builder (for runs)
 # ============================================================================
 
-def text_strip(value) -> str:
+def text_strip(value: Optional[str]) -> str:
     """Helper to safely strip text values."""
     return (value or "").strip()
 
@@ -277,9 +280,11 @@ def build_full_context(activity, scenario) -> str:
 
     Migrated from Flask's build_full_context function.
     """
-    parts = []
+    parts: list[str] = []
 
+    # ----------------------------------------------------------------------
     # Activity information
+    # ----------------------------------------------------------------------
     parts.append("=== ACTIVITY ===")
     if activity:
         pre_brief = text_strip(getattr(activity, "pre_brief", ""))
@@ -287,23 +292,33 @@ def build_full_context(activity, scenario) -> str:
             parts.append(f"Pre-brief: {pre_brief}")
 
         # Categories with subcategories
-        categories_list = []
-        for category in getattr(activity, "categories", []) or []:
+        categories_list: list[str] = []
+
+        # Activity.categories is a ManyToMany to Category
+        for category in activity.categories.all():
             cat_name = text_strip(getattr(category, "name", ""))
-            subcats = []
-            for subcat in getattr(category, "subcategories", []) or []:
+            subcats: list[str] = []
+
+            # Category.subcategories is FK reverse to SubCategory
+            for subcat in category.subcategories.all():
                 subcat_name = text_strip(getattr(subcat, "name", ""))
                 if subcat_name:
                     subcats.append(subcat_name)
-            cat_text = cat_name + (f" — {', '.join(subcats)}" if subcats else "")
-            if cat_text:
+
+            if cat_name:
+                cat_text = cat_name
+                if subcats:
+                    cat_text += f" — {', '.join(subcats)}"
                 categories_list.append(cat_text)
 
         if categories_list:
             parts.append("Categories: " + "; ".join(categories_list))
 
+    # ----------------------------------------------------------------------
     # Scenario information
-    parts.append("\n=== CHARACTER / SCENARIO ===")
+    # ----------------------------------------------------------------------
+    parts.append("")
+    parts.append("=== CHARACTER / SCENARIO ===")
     if scenario:
         role = text_strip(getattr(scenario, "role", ""))
         scenario_text = text_strip(getattr(scenario, "scenario_text", ""))
@@ -319,28 +334,44 @@ def build_full_context(activity, scenario) -> str:
         if additional:
             parts.append(f"Additional Instructions:\n{additional}")
 
-        # Tags
-        tags = []
-        for tag in getattr(scenario, "tags", []) or []:
-            tag_text = text_strip(getattr(tag, "tag", ""))
-            if tag_text:
-                tags.append(tag_text)
+        # Tags (if present)
+        tags: list[str] = []
+        tags_manager = getattr(scenario, "tags", None)
+        if tags_manager is not None:
+            try:
+                tags_iterable = tags_manager.all()
+            except AttributeError:
+                # In case tags is already a queryset / list
+                tags_iterable = tags_manager
+            for tag in tags_iterable:
+                tag_text = text_strip(
+                    getattr(tag, "tag", "") or getattr(tag, "name", "")
+                )
+                if tag_text:
+                    tags.append(tag_text)
         if tags:
             parts.append(f"Tags: {', '.join(tags)}")
 
-        # Rubric questions
-        rubrics = []
-        for rubric in getattr(scenario, "rubrics", []) or []:
-            question = text_strip(getattr(rubric, "question", ""))
-            if question:
-                rubrics.append(question)
-        if rubrics:
-            parts.append("\n=== RUBRIC ===")
-            for i, q in enumerate(rubrics, 1):
-                parts.append(f"{i}. {q}")
+        # Legacy rubric questions attached to scenario (RubricQuestion)
+        rubrics: list[str] = []
+        rubric_manager = getattr(scenario, "rubric_questions", None)
+        if rubric_manager is not None:
+            for rubric in rubric_manager.all():
+                question = text_strip(getattr(rubric, "question", ""))
+                if question:
+                    rubrics.append(question)
 
-    # Behavioral instructions
-    parts.append("\n=== INSTRUCTIONS TO MODEL ===")
+        if rubrics:
+            parts.append("")
+            parts.append("=== RUBRIC ===")
+            for index, question in enumerate(rubrics, start=1):
+                parts.append(f"{index}. {question}")
+
+    # ----------------------------------------------------------------------
+    # Behavioural instructions
+    # ----------------------------------------------------------------------
+    parts.append("")
+    parts.append("=== INSTRUCTIONS TO MODEL ===")
     parts.append(
         "Use all details above. If any information is missing or ambiguous, "
         "ask a brief clarifying question before continuing. Prefer factual, "
