@@ -65,15 +65,20 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate_pre_brief(self, value):
         """Ensure pre_brief is not empty."""
+        print(f"\n*******\n*******\n******* Validate character pre brief \n*******\n*******\n******* ")
         if not value or not value.strip():
             raise serializers.ValidationError("Pre-brief cannot be empty.")
         return value
 
     def validate_character_id(self, value):
         """Ensure character (scenario) exists."""
+        print(f"\n*******\n*******\n******* Validate character id ran \n*******\n*******\n******* ")
         from apps.scenarios.models import AssistantScenario
         if not AssistantScenario.objects.filter(id=value).exists():
             raise serializers.ValidationError("Character not found.")
+
+        scenario = AssistantScenario.objects.filter(id=value).exists()
+        print(f"************************\n\n The character '{value}'={scenario} exists \n\n")
         return value
 
     def validate_categories(self, value):
@@ -88,6 +93,8 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """Create activity with M2M category relationships."""
+
+        print(f"************************\n\n {validated_data} \n\n")
         category_ids = validated_data.pop('categories', [])
         activity = Activity.objects.create(**validated_data)
 

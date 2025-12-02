@@ -55,24 +55,25 @@ const HomeComponent = () => {
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
         }}
       >
-        <Toolbar sx={{ justifyContent: 'space-between', py: 1 }}>
+        <Toolbar sx={{ justifyContent: 'space-between', py: { xs: 0.5, sm: 1 }, minHeight: { xs: 56, sm: 64 } }}>
           {/* Logo/Brand */}
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
-              gap: 1,
+              gap: { xs: 0.75, sm: 1 },
               cursor: 'pointer',
             }}
             onClick={() => navigate('/home')}
           >
-            <LocalHospitalIcon sx={{ fontSize: 32, color: '#FF5630' }} />
+            <LocalHospitalIcon sx={{ fontSize: { xs: 28, sm: 32 }, color: '#FF5630' }} />
             <Typography
               variant="h5"
               sx={{
                 fontWeight: 700,
                 color: 'white',
                 letterSpacing: '-0.5px',
+                fontSize: { xs: '1.25rem', sm: '1.5rem' }
               }}
             >
               MedComm
@@ -80,16 +81,18 @@ const HomeComponent = () => {
           </Box>
 
           {/* Right Side */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1, md: 2 } }}>
             {!isHome && (
               <Button
-                startIcon={<HomeIcon />}
+                startIcon={<HomeIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />}
                 onClick={() => navigate('/home')}
                 sx={{
                   color: 'white',
                   textTransform: 'none',
                   fontWeight: 600,
-                  px: 2,
+                  px: { xs: 1, sm: 1.5, md: 2 },
+                  fontSize: { xs: '0.8125rem', sm: '0.875rem' },
+                  display: { xs: 'none', sm: 'flex' },
                   '&:hover': {
                     bgcolor: 'rgba(255, 255, 255, 0.1)',
                   },
@@ -99,6 +102,23 @@ const HomeComponent = () => {
               </Button>
             )}
 
+            {/* Mobile Home Icon Button */}
+            {!isHome && (
+              <IconButton
+                onClick={() => navigate('/home')}
+                sx={{
+                  color: 'white',
+                  display: { xs: 'flex', sm: 'none' },
+                  p: 1,
+                  '&:hover': {
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+              >
+                <HomeIcon sx={{ fontSize: 20 }} />
+              </IconButton>
+            )}
+
             <Chip
               label={role === 'admin' ? 'Admin' : 'Student'}
               size="small"
@@ -106,7 +126,9 @@ const HomeComponent = () => {
                 bgcolor: 'rgba(255, 255, 255, 0.2)',
                 color: 'white',
                 fontWeight: 600,
+                fontSize: { sm: '0.75rem', md: '0.8125rem' },
                 display: { xs: 'none', sm: 'flex' },
+                height: { sm: 24, md: 28 },
               }}
             />
 
@@ -118,6 +140,7 @@ const HomeComponent = () => {
               onClick={handleMenu}
               sx={{
                 color: 'white',
+                p: { xs: 0.5, sm: 1 },
                 '&:hover': {
                   bgcolor: 'rgba(255, 255, 255, 0.1)',
                 },
@@ -125,10 +148,10 @@ const HomeComponent = () => {
             >
               <Avatar
                 sx={{
-                  width: 40,
-                  height: 40,
+                  width: { xs: 36, sm: 40 },
+                  height: { xs: 36, sm: 40 },
                   bgcolor: '#FF5630',
-                  fontSize: '1rem',
+                  fontSize: { xs: '0.875rem', sm: '1rem' },
                   fontWeight: 700,
                 }}
               >

@@ -51,10 +51,22 @@ const ActivitiesHome = () => {
   }, [fetchData]);
 
   const handleSave = async () => {
+    // Validate required fields
+    if (!form.pre_brief.trim()) {
+      dispatch(showSnackbar({ message: 'Pre-brief is required', severity: 'error' }));
+      return;
+    }
+
+    if (!form.character_id) {
+      dispatch(showSnackbar({ message: 'Please select a character', severity: 'error' }));
+      return;
+    }
+
     try {
       await post('/activities/', form);
       dispatch(showSnackbar({ message: 'Activity saved', severity: 'success' }));
       setOpenDialog(false);
+      setForm({ id: null, pre_brief: '', character_id: '', categories: [] });
       fetchData();
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to save activity', severity: 'error' }));
@@ -81,11 +93,16 @@ const ActivitiesHome = () => {
     setOpenDialog(true);
   };
 
+  const openAddDialog = () => {
+    setForm({ id: null, pre_brief: '', character_id: '', categories: [] });
+    setOpenDialog(true);
+  };
+
   return (
     <Box p={4}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Typography variant="h4">Activities</Typography>
-        <Button startIcon={<AddIcon />} onClick={() => setOpenDialog(true)} variant="contained">
+        <Button startIcon={<AddIcon />} onClick={openAddDialog} variant="contained">
           Add Activity
         </Button>
       </Box>

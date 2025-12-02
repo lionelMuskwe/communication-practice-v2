@@ -32,9 +32,14 @@ if DATABASE_URL.startswith('postgresql://'):
     DATABASES['default'] = dj_database_url.parse(DATABASE_URL)
 
 # Development logging - more verbose
-LOGGING['root']['level'] = 'DEBUG'
-LOGGING['loggers']['django']['level'] = 'DEBUG'
+LOGGING['root']['level'] = 'INFO'
+LOGGING['loggers']['django']['level'] = 'INFO'
 LOGGING['loggers']['apps']['level'] = 'DEBUG'
+LOGGING['loggers']['django.utils.autoreload'] = {
+    'handlers': ['console'],
+    'level': 'INFO', 
+    'propagate': False,
+}
 
 # Email backend for development
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

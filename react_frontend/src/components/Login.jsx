@@ -126,36 +126,81 @@ const LoginPage = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 3,
+        padding: { xs: 2, sm: 3 },
       }}
     >
       <Container maxWidth="lg">
-        <Grid container spacing={4} alignItems="center">
+        <Grid container spacing={{ xs: 3, md: 4 }} alignItems="center">
           {/* Left Side - Branding */}
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' } }}>
             <Fade in timeout={1000}>
               <Box sx={{ color: 'white', pr: { md: 4 } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                  <LocalHospitalIcon sx={{ fontSize: 60, mr: 2, color: '#FF5630' }} />
-                  <Typography variant="h3" sx={{ fontWeight: 700, letterSpacing: '-0.5px' }}>
+                  <LocalHospitalIcon sx={{ fontSize: { xs: 50, md: 60 }, mr: 2, color: '#FF5630' }} />
+                  <Typography
+                    variant="h3"
+                    sx={{
+                      fontWeight: 700,
+                      letterSpacing: '-0.5px',
+                      fontSize: { xs: '2rem', md: '3rem' }
+                    }}
+                  >
                     MedComm
                   </Typography>
                 </Box>
-                <Typography variant="h4" sx={{ fontWeight: 600, mb: 3, lineHeight: 1.3 }}>
+                <Typography
+                  variant="h4"
+                  sx={{
+                    fontWeight: 600,
+                    mb: 3,
+                    lineHeight: 1.3,
+                    fontSize: { xs: '1.75rem', md: '2.125rem' }
+                  }}
+                >
                   Master Clinical Communication Skills
                 </Typography>
-                <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, fontWeight: 300 }}>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    mb: 4,
+                    opacity: 0.9,
+                    fontWeight: 300,
+                    fontSize: { xs: '1rem', md: '1.25rem' }
+                  }}
+                >
                   An AI-powered platform designed to help medical students practice and perfect
                   patient communication through realistic simulations.
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 4, mt: 4 }}>
+                <Box sx={{ display: 'flex', gap: { xs: 3, md: 4 }, mt: 4, flexWrap: 'wrap' }}>
                   <Box>
-                    <Typography variant="h3" sx={{ fontWeight: 700, color: '#FF5630' }}>500+</Typography>
-                    <Typography sx={{ opacity: 0.8 }}>Practice Scenarios</Typography>
+                    <Typography
+                      variant="h3"
+                      sx={{
+                        fontWeight: 700,
+                        color: '#FF5630',
+                        fontSize: { xs: '2rem', md: '3rem' }
+                      }}
+                    >
+                      500+
+                    </Typography>
+                    <Typography sx={{ opacity: 0.8, fontSize: { xs: '0.875rem', md: '1rem' } }}>
+                      Practice Scenarios
+                    </Typography>
                   </Box>
                   <Box>
-                    <Typography variant="h3" sx={{ fontWeight: 700, color: '#FF5630' }}>95%</Typography>
-                    <Typography sx={{ opacity: 0.8 }}>Student Satisfaction</Typography>
+                    <Typography
+                      variant="h3"
+                      sx={{
+                        fontWeight: 700,
+                        color: '#FF5630',
+                        fontSize: { xs: '2rem', md: '3rem' }
+                      }}
+                    >
+                      95%
+                    </Typography>
+                    <Typography sx={{ opacity: 0.8, fontSize: { xs: '0.875rem', md: '1rem' } }}>
+                      Student Satisfaction
+                    </Typography>
                   </Box>
                 </Box>
               </Box>
@@ -168,17 +213,39 @@ const LoginPage = () => {
               <Paper
                 elevation={24}
                 sx={{
-                  p: 5,
-                  borderRadius: 4,
+                  p: { xs: 3, sm: 4, md: 5 },
+                  borderRadius: { xs: 3, md: 4 },
                   background: 'rgba(255, 255, 255, 0.98)',
                   backdropFilter: 'blur(10px)',
                 }}
               >
-                <Box sx={{ textAlign: 'center', mb: 4 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#172B4D', mb: 1 }}>
+                {/* Mobile-only branding */}
+                <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', alignItems: 'center', mb: 3 }}>
+                  <LocalHospitalIcon sx={{ fontSize: 40, mr: 1.5, color: '#FF5630' }} />
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#0052CC' }}>
+                    MedComm
+                  </Typography>
+                </Box>
+
+                <Box sx={{ textAlign: 'center', mb: { xs: 3, md: 4 } }}>
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      fontWeight: 700,
+                      color: '#172B4D',
+                      mb: 1,
+                      fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
+                    }}
+                  >
                     Welcome Back
                   </Typography>
-                  <Typography variant="body1" sx={{ color: '#5E6C84' }}>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      color: '#5E6C84',
+                      fontSize: { xs: '0.875rem', sm: '1rem' }
+                    }}
+                  >
                     Sign in to continue your learning journey
                   </Typography>
                 </Box>
