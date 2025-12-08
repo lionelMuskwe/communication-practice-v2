@@ -129,7 +129,7 @@ services:
     container_name: react_frontend_v2
     restart: unless-stopped
     volumes:
-      - ./react_frontend/nginx.v2.conf:/etc/nginx/nginx.conf:ro
+      - ./react_frontend/nginx.conf:/etc/nginx/nginx.conf:ro
     expose:
       - "80"
     ports:
