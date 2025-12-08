@@ -11,3 +11,7 @@ django-redis==5.4.0
 
 # Health checks
 django-health-check==3.18.1
+
+
+# I will remove this later:
+django-debug-toolbar==4.2.0

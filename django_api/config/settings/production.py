@@ -90,5 +90,4 @@ INSTALLED_APPS += [
     'health_check.db',
     'health_check.cache',
     'health_check.contrib.celery',
-    'health_check.contrib.psutil',
 ]
