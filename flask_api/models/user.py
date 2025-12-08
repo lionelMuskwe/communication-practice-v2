@@ -9,7 +9,7 @@ class User(db.Model):
     role = db.Column(db.String(70), nullable = True)
     def __repr__(self):
         return f"User('{self.username}', '{self.email}')"
-    
+
 class AssistantScenario(db.Model):
     __tablename__ = 'assistant_scenarios'
 
@@ -87,7 +87,7 @@ class Tags(db.Model):
 
     def __repr__(self):
         return f"<Tag {self.id}: {self.tag}>"
-    
+
 
 class Category(db.Model):
     __tablename__ = 'categories'

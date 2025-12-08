@@ -5,8 +5,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from apps.scenarios.models import AssistantScenario
-from apps.activities.models import Activity
+from django_api.apps.scenarios.models import AssistantScenario
+from django_api.apps.activities.models import Activity
 from .services import ThreadService, RunService, build_full_context, get_openai_model
 from .evaluators import CategoryRubricEvaluator, SimpleRubricEvaluator
 from .serializers import (
