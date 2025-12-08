@@ -1,317 +1,313 @@
+"""
+OpenAI Integration Views.
+
+Handles conversation management and SSE streaming for Chat Completions API.
+"""
 import logging
-import requests
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from django.http import StreamingHttpResponse
+from django.db import transaction
+from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
-from django_api.apps.scenarios.models import AssistantScenario
-from django_api.apps.activities.models import Activity
-from .services import ThreadService, RunService, build_full_context, get_openai_model
+from apps.scenarios.models import AssistantScenario
+from apps.activities.models import Activity
+from .models import Conversation, Message
+from .services import ChatCompletionService, build_full_context, get_openai_model
 from .evaluators import CategoryRubricEvaluator, SimpleRubricEvaluator
 from .serializers import (
-    RunCreateSerializer,
-    MessageCreateSerializer,
+    ConversationListSerializer,
+    ConversationDetailSerializer,
+    ConversationCreateSerializer,
+    ConversationUpdateSerializer,
+    MessageSerializer,
+    MessageStreamSerializer,
     RubricAssessmentRequestSerializer,
-    SimpleRubricRequestSerializer
+    SimpleRubricRequestSerializer,
 )
-from rest_framework.views import APIView
 
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Thread Management
+# Conversation Management ViewSet
 # ============================================================================
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_thread(request):
+class ConversationViewSet(viewsets.ModelViewSet):
     """
-    Create a new OpenAI conversation thread.
+    ViewSet for managing conversations.
 
-    POST /api/threads/
-    Response: {"thread_id": "thread_..."}
+    Endpoints:
+    - GET /api/conversations/ - List user's conversations
+    - POST /api/conversations/ - Create new conversation
+    - GET /api/conversations/<uuid>/ - Get conversation detail
+    - PATCH /api/conversations/<uuid>/ - Update conversation
+    - DELETE /api/conversations/<uuid>/ - Delete (soft) conversation
     """
-    try:
-        data = ThreadService.create_thread()
-        return Response(
-            {"thread_id": data.get("id")},
-            status=status.HTTP_201_CREATED
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+
+    def get_queryset(self):
+        """Filter conversations by current user."""
+        from django.db.models import Count
+
+        queryset = Conversation.objects.filter(
+            user=self.request.user,
+        ).select_related('activity', 'scenario').annotate(
+            message_count=Count('messages')
         )
-    except requests.HTTPError as e:
+
+        # Filter out conversations with 0 messages
+        queryset = queryset.filter(message_count__gt=0)
+
+        # Optional filters
+        activity_id = self.request.query_params.get('activity_id')
+        is_archived = self.request.query_params.get('is_archived')
+
+        if activity_id:
+            queryset = queryset.filter(activity_id=activity_id)
+
+        if is_archived is not None:
+            is_archived_bool = is_archived.lower() in ('true', '1', 'yes')
+            queryset = queryset.filter(is_archived=is_archived_bool)
+
+        return queryset
+
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action."""
+        if self.action == 'list':
+            return ConversationListSerializer
+        elif self.action in ['retrieve', 'messages']:
+            return ConversationDetailSerializer
+        elif self.action == 'create':
+            return ConversationCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return ConversationUpdateSerializer
+        return ConversationDetailSerializer
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new conversation.
+
+        POST /api/conversations/
+        Body: {
+            "activity_id": 1 (optional),
+            "scenario_id": 1 (required)
+        }
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        activity_id = serializer.validated_data.get('activity_id')
+        scenario_id = serializer.validated_data.get('scenario_id')
+
+        # Load activity and scenario
+        activity = None
+        scenario = None
+
+        if activity_id:
+            try:
+                activity = Activity.objects.prefetch_related(
+                    'categories',
+                    'categories__subcategories',
+                ).get(id=activity_id)
+            except Activity.DoesNotExist:
+                return Response(
+                    {"message": "Activity not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
         try:
-            details = e.response.json()
-        except Exception:
-            details = str(e)
-        return Response(
-            {"message": "OpenAI error", "details": details},
-            status=e.response.status_code if hasattr(e, 'response') else 500
+            scenario = AssistantScenario.objects.get(id=scenario_id)
+        except AssistantScenario.DoesNotExist:
+            return Response(
+                {"message": "Scenario not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Create conversation
+        conversation = Conversation.objects.create(
+            user=request.user,
+            activity=activity,
+            scenario=scenario,
+            title=Conversation().generate_title_from_prebrief() if activity else f"Chat with {scenario.role}"
         )
-    except Exception as e:
-        logger.error(f"Create thread failed: {e}")
-        return Response(
-            {"message": "Internal server error"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+
+        # If activity exists, set proper title
+        if activity:
+            conversation.title = conversation.generate_title_from_prebrief()
+            conversation.save(update_fields=['title'])
+
+        output_serializer = ConversationDetailSerializer(conversation)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Get conversation with all messages."""
+        conversation = self.get_object()
+        serializer = self.get_serializer(conversation)
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Update conversation (title, archive status).
+
+        PATCH /api/conversations/<uuid>/
+        Body: {"title": "New Title", "is_archived": true}
+        """
+        conversation = self.get_object()
+        serializer = self.get_serializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        if 'title' in serializer.validated_data:
+            conversation.title = serializer.validated_data['title']
+
+        if 'is_archived' in serializer.validated_data:
+            conversation.is_archived = serializer.validated_data['is_archived']
+
+        conversation.save()
+
+        output_serializer = ConversationDetailSerializer(conversation)
+        return Response(output_serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft delete conversation (set is_archived=True).
+
+        DELETE /api/conversations/<uuid>/
+        """
+        conversation = self.get_object()
+        conversation.is_archived = True
+        conversation.save(update_fields=['is_archived', 'updated_at'])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'])
+    def messages(self, request, pk=None):
+        """
+        Get all messages for a conversation.
+
+        GET /api/conversations/<uuid>/messages/
+        """
+        conversation = self.get_object()
+        serializer = ConversationDetailSerializer(conversation)
+        return Response(serializer.data)
 
 
-class ThreadMessagesView(APIView):
+# ============================================================================
+# Message Streaming View
+# ============================================================================
+
+class ConversationMessageStreamView(APIView):
     """
-    Manage messages for a given OpenAI thread.
+    Stream messages using Server-Sent Events (SSE).
 
-    - GET  /api/threads/<thread_id>/messages/  -> list messages
-    - POST /api/threads/<thread_id>/messages/  -> add a message
+    POST /api/conversations/<uuid>/stream/
+    Body: {"content": "user message"}
     """
-
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, thread_id: str):
+    def post(self, request, pk):
         """
-        Add a message to a thread.
+        Send a message and stream the assistant's response.
 
-        POST /api/threads/<thread_id>/messages/
-        Body: {"role": "user", "content": "Hello"}
+        Returns StreamingHttpResponse with SSE format.
         """
-        serializer = MessageCreateSerializer(data=request.data)
+        # Validate conversation exists and belongs to user
+        try:
+            conversation = Conversation.objects.select_related(
+                'activity',
+                'scenario'
+            ).get(pk=pk, user=request.user)
+        except Conversation.DoesNotExist:
+            return Response(
+                {"message": "Conversation not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Validate request
+        serializer = MessageStreamSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            data = ThreadService.create_message(
-                thread_id=thread_id,
-                role=serializer.validated_data["role"],
-                content=serializer.validated_data["content"],
-            )
-            return Response(data, status=status.HTTP_201_CREATED)
+        user_content = serializer.validated_data['content']
 
-        except requests.HTTPError as exc:
+        # Save user message immediately
+        user_message = Message.objects.create(
+            conversation=conversation,
+            role='user',
+            content=user_content
+        )
+
+        # Update conversation title if still default
+        conversation.update_title_if_needed()
+
+        # Build messages for OpenAI
+        messages = ChatCompletionService.build_messages_for_chat_completion(
+            conversation=conversation,
+            activity=conversation.activity,
+            scenario=conversation.scenario
+        )
+
+        def event_stream():
+            """Generator for SSE stream."""
+            full_content = ""
+
             try:
-                details = exc.response.json()
-            except Exception:
-                details = str(exc)
-            return Response(
-                {"message": "OpenAI error", "details": details},
-                status=exc.response.status_code
-                if getattr(exc, "response", None) is not None
-                else status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        except Exception as exc:
-            logger.error(f"Add message failed: {exc}")
-            return Response(
-                {"message": "Internal server error"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-    def get(self, request, thread_id: str):
-        """
-        List all messages in a thread (oldest first for UI).
-
-        GET /api/threads/<thread_id>/messages/
-        Response: [{"role": "user", "message": "...", "created_at": 123456789}, ...]
-        """
-        try:
-            data = ThreadService.list_messages(thread_id)
-            items = []
-
-            # OpenAI returns newest first; reverse to oldest first for UI
-            for message in reversed(data.get("data", [])):
-                role = message.get("role")
-                timestamp = message.get("created_at")
-                text = ""
-
-                # Extract text from content blocks
-                for block in message.get("content", []):
-                    if block.get("type") == "text":
-                        text += block["text"]["value"]
-
-                # Convert timestamp to milliseconds if needed
-                created_at = (
-                    timestamp * 1000 if isinstance(timestamp, int) else timestamp
+                # Stream from OpenAI
+                stream = ChatCompletionService.stream_chat_completion(
+                    messages=messages,
+                    model=get_openai_model()
                 )
 
-                items.append(
-                    {
-                        "role": role,
-                        "message": text,
-                        "created_at": created_at,
-                    }
+                for chunk in stream:
+                    yield chunk
+
+                    # Extract content from chunk
+                    if chunk.startswith('data: '):
+                        import json
+                        try:
+                            data = json.loads(chunk[6:])
+                            if 'token' in data:
+                                full_content += data['token']
+                        except json.JSONDecodeError:
+                            pass
+
+                # Save assistant message after streaming completes
+                assistant_message = Message.objects.create(
+                    conversation=conversation,
+                    role='assistant',
+                    content=full_content,
+                    model=get_openai_model()
                 )
 
-            return Response(items, status=status.HTTP_200_OK)
+                # Update conversation timestamp
+                conversation.save(update_fields=['updated_at'])
 
-        except requests.HTTPError as exc:
-            try:
-                details = exc.response.json()
-            except Exception:
-                details = str(exc)
-            return Response(
-                {"message": "OpenAI error", "details": details},
-                status=exc.response.status_code
-                if getattr(exc, "response", None) is not None
-                else status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        except Exception as exc:
-            logger.error(f"List messages failed: {exc}")
-            return Response(
-                {"message": "Internal server error"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+                logger.info(
+                    f"Conversation {conversation.id}: "
+                    f"User message {user_message.id}, "
+                    f"Assistant message {assistant_message.id}"
+                )
+
+            except Exception as e:
+                logger.error(f"Streaming error: {e}")
+                import json
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+        response = StreamingHttpResponse(
+            event_stream(),
+            content_type='text/event-stream'
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
 
 
 # ============================================================================
-# Run Management (Conversation Execution)
-# ============================================================================
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def run_thread(request):
-    """
-    Execute conversation with assistant (create run).
-
-    POST /api/threads/run/
-    Body: {
-        "thread_id": "thread_...",
-        "scenario_id": 1,  (or assistant_id for legacy)
-        "activity_id": 1,  (optional)
-        "model": "gpt-4"   (optional override)
-    }
-    Response: {"run_id": "run_...", "status": "queued"}
-    """
-    serializer = RunCreateSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    data = serializer.validated_data
-    thread_id = data['thread_id']
-    scenario_id = data.get('scenario_id')
-    activity_id = data.get('activity_id')
-    model_override = data.get('model')
-
-    # Load activity and scenario
-    activity = None
-    scenario = None
-
-    if activity_id:
-        try:
-            activity = Activity.objects.prefetch_related(
-                'categories',
-                'categories__subcategories',
-                'character',
-                'character__tags',
-                'character__rubric_questions'
-            ).get(id=activity_id)
-        except Activity.DoesNotExist:
-            pass
-
-    if scenario_id:
-        try:
-            scenario = AssistantScenario.objects.prefetch_related(
-                'tags',
-                'rubric_questions'
-            ).get(id=scenario_id)
-        except AssistantScenario.DoesNotExist:
-            pass
-    elif activity and activity.character_id:
-        try:
-            scenario = AssistantScenario.objects.prefetch_related(
-                'tags',
-                'rubric_questions'
-            ).get(id=activity.character_id)
-        except AssistantScenario.DoesNotExist:
-            pass
-
-    if not scenario:
-        return Response(
-            {"message": "Scenario not found (provide scenario_id or activity_id with character)"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    assistant_id = scenario.openid
-    if not assistant_id:
-        return Response(
-            {"message": "Scenario has no assistant 'openid' configured"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Build context for additional_instructions
-    context = build_full_context(activity, scenario)
-
-    try:
-        run_data = RunService.create_run(
-            thread_id=thread_id,
-            assistant_id=assistant_id,
-            additional_instructions=context,
-            model_override=model_override or get_openai_model()
-        )
-
-        return Response(
-            {
-                "run_id": run_data.get("id"),
-                "status": run_data.get("status")
-            },
-            status=status.HTTP_201_CREATED
-        )
-
-    except requests.HTTPError as e:
-        try:
-            details = e.response.json()
-        except Exception:
-            details = str(e)
-        return Response(
-            {"message": "OpenAI error", "details": details},
-            status=e.response.status_code if hasattr(e, 'response') else 500
-        )
-    except Exception as e:
-        logger.error(f"Run thread failed: {e}")
-        return Response(
-            {"message": "Internal server error"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def run_status(request, run_id):
-    """
-    Check the status of a run.
-
-    GET /api/runs/<run_id>/status/?thread_id=thread_...
-    Response: {"status": "completed"}
-    """
-    thread_id = request.query_params.get('thread_id')
-    if not thread_id:
-        return Response(
-            {"message": "thread_id is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    try:
-        data = RunService.get_run_status(thread_id, run_id)
-        return Response(
-            {"status": data.get("status")},
-            status=status.HTTP_200_OK
-        )
-    except requests.HTTPError as e:
-        try:
-            details = e.response.json()
-        except Exception:
-            details = str(e)
-        return Response(
-            {"message": "OpenAI error", "details": details},
-            status=e.response.status_code if hasattr(e, 'response') else 500
-        )
-    except Exception as e:
-        logger.error(f"Check run status failed: {e}")
-        return Response(
-            {"message": "Internal server error"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
-# ============================================================================
-# Rubric Assessment (AI-powered evaluation)
+# Rubric Assessment
 # ============================================================================
 
 @api_view(['POST'])
@@ -320,23 +316,56 @@ def rubric_assessment(request, activity_id):
     """
     Advanced rubric assessment with evidence citations.
 
+    Now accepts conversation_id instead of messages array.
+
     POST /api/activities/<activity_id>/rubric_assessment/
     Body: {
-        "messages": [{"role": "user", "message": "..."}, ...],
-        "scenario_id": 1  (optional)
+        "conversation_id": "uuid",
+        "scenario_id": 1 (optional)
     }
     Response: {
         "categories": [...],
         "overall": {"total_score": 10, "passed": true}
     }
     """
-    serializer = RubricAssessmentRequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    conversation_id = request.data.get('conversation_id')
+    scenario_id = request.data.get('scenario_id')
 
-    data = serializer.validated_data
-    messages = data['messages']
-    scenario_id = data.get('scenario_id')
+    if not conversation_id:
+        return Response(
+            {"message": "conversation_id is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Fetch conversation
+    try:
+        conversation = Conversation.objects.prefetch_related(
+            'messages'
+        ).get(pk=conversation_id, user=request.user)
+    except Conversation.DoesNotExist:
+        return Response(
+            {"message": "Conversation not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check minimum message requirement (5 user messages)
+    user_message_count = conversation.get_user_message_count()
+    if user_message_count < 5:
+        return Response(
+            {
+                "message": f"At least 5 user messages required for assessment. Current count: {user_message_count}"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Convert messages to expected format
+    messages = []
+    for msg in conversation.messages.all():
+        messages.append({
+            'role': msg.role,
+            'message': msg.content,
+            'created_at': int(msg.created_at.timestamp() * 1000)
+        })
 
     # Load scenario for context (optional)
     scenario = None
@@ -345,6 +374,8 @@ def rubric_assessment(request, activity_id):
             scenario = AssistantScenario.objects.get(id=scenario_id)
         except AssistantScenario.DoesNotExist:
             pass
+    elif conversation.scenario:
+        scenario = conversation.scenario
 
     try:
         result = CategoryRubricEvaluator.evaluate(

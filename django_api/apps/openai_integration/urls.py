@@ -1,23 +1,40 @@
-from django.urls import path
+"""
+OpenAI Integration URL Configuration.
+"""
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+
 from .views import (
-    create_thread,
-    run_thread,
-    run_status,
+    ConversationViewSet,
+    ConversationMessageStreamView,
     rubric_assessment,
     rubric_responses,
-    ThreadMessagesView
 )
 
-urlpatterns = [
-    # Thread management
-    path('threads/', create_thread, name='create-thread'),
-    path("threads/<str:thread_id>/messages/", ThreadMessagesView.as_view(), name="thread-messages", ),
+# Router for ConversationViewSet
+router = DefaultRouter()
+router.register(r'conversations', ConversationViewSet, basename='conversation')
 
-    # Run management
-    path('threads/run/', run_thread, name='run-thread'),
-    path('runs/<str:run_id>/status/', run_status, name='run-status'),
+urlpatterns = [
+    # Conversation management (RESTful routes)
+    path('', include(router.urls)),
+
+    # Message streaming endpoint
+    path(
+        'conversations/<uuid:pk>/stream/',
+        ConversationMessageStreamView.as_view(),
+        name='conversation-stream'
+    ),
 
     # Rubric assessment
-    path('activities/<int:activity_id>/rubric_assessment/', rubric_assessment, name='rubric-assessment'),
-    path('scenarios/<int:scenario_id>/rubric_responses/', rubric_responses, name='rubric-responses'),
+    path(
+        'activities/<int:activity_id>/rubric_assessment/',
+        rubric_assessment,
+        name='rubric-assessment'
+    ),
+    path(
+        'scenarios/<int:scenario_id>/rubric_responses/',
+        rubric_responses,
+        name='rubric-responses'
+    ),
 ]

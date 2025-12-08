@@ -3,10 +3,11 @@ OpenAI API integration services.
 Migrated from Flask's openai_controller.py and assistant_scenario_controller.py.
 """
 import os
+import json
 import logging
 import requests
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, Generator
 
 from django.conf import settings
 
@@ -379,3 +380,145 @@ def build_full_context(activity, scenario) -> str:
     )
 
     return "\n".join(parts)
+
+
+# ============================================================================
+# Chat Completions Service (New Streaming API)
+# ============================================================================
+
+class ChatCompletionService:
+    """Service for OpenAI Chat Completions API with streaming support."""
+
+    @staticmethod
+    def build_messages_for_chat_completion(
+        conversation,
+        activity=None,
+        scenario=None
+    ) -> list[Dict[str, str]]:
+        """
+        Build messages array for Chat Completions API.
+
+        Args:
+            conversation: Conversation model instance
+            activity: Activity model instance (optional, from conversation)
+            scenario: AssistantScenario model instance (optional, from conversation)
+
+        Returns:
+            List of message dicts in OpenAI format
+        """
+        messages = []
+
+        # Build system message from context
+        if activity or scenario:
+            context = build_full_context(activity, scenario)
+            messages.append({
+                "role": "system",
+                "content": context
+            })
+
+        # Add conversation history
+        for msg in conversation.messages.all().order_by('created_at'):
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+
+        return messages
+
+    @staticmethod
+    def stream_chat_completion(
+        messages: list[Dict[str, str]],
+        model: Optional[str] = None
+    ) -> Generator[str, None, str]:
+        """
+        Stream chat completion from OpenAI.
+
+        Yields SSE-formatted chunks: data: {...}\n\n
+
+        Args:
+            messages: Array of message dicts
+            model: Optional model override
+
+        Yields:
+            SSE-formatted strings
+
+        Returns:
+            Complete message content when done
+        """
+        api_key = get_openai_key()
+        if not api_key:
+            raise RuntimeError("OpenAI API key not configured")
+
+        model_name = model or get_openai_model()
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "stream": True,
+        }
+
+        full_content = ""
+
+        try:
+            response = requests.post(
+                f"{OPENAI_API}/chat/completions",
+                headers=headers,
+                json=payload,
+                stream=True,
+                timeout=120,
+            )
+            response.raise_for_status()
+
+            # Process SSE stream
+            for line in response.iter_lines():
+                if not line:
+                    continue
+
+                line_text = line.decode('utf-8')
+
+                # Skip empty lines and comments
+                if not line_text.strip() or line_text.startswith(':'):
+                    continue
+
+                # Remove 'data: ' prefix
+                if line_text.startswith('data: '):
+                    line_text = line_text[6:]
+
+                # Check for end of stream
+                if line_text.strip() == '[DONE]':
+                    break
+
+                try:
+                    chunk = json.loads(line_text)
+                    delta = chunk.get('choices', [{}])[0].get('delta', {})
+                    content = delta.get('content', '')
+
+                    if content:
+                        full_content += content
+                        # Yield SSE-formatted chunk
+                        yield f"data: {json.dumps({'token': content})}\n\n"
+
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse SSE chunk: {e}")
+                    continue
+
+            # Send completion event
+            yield f"data: {json.dumps({'done': True})}\n\n"
+
+            return full_content
+
+        except requests.HTTPError as e:
+            logger.error(f"OpenAI API error: {e}")
+            error_msg = f"OpenAI API error: {e.response.status_code}"
+            yield f"data: {json.dumps({'error': error_msg})}\n\n"
+            raise
+
+        except Exception as e:
+            logger.error(f"Chat completion streaming error: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            raise

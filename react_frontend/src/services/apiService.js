@@ -271,5 +271,166 @@ export const rubricResponses = ({
     { timeout: timeoutMs }
   );
 
+// ─────────────────────────────────────────────────────────────
+// New Conversation API (Chat Completions with SSE Streaming)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Create a new conversation.
+ * @param {number} activityId - Activity ID (optional)
+ * @param {number} scenarioId - Scenario ID (required)
+ * @returns {Promise} Response with conversation object
+ */
+export const createConversation = (activityId, scenarioId) =>
+  post('/conversations/', {
+    activity_id: activityId,
+    scenario_id: scenarioId,
+  });
+
+/**
+ * Get list of user's conversations.
+ * @param {Object} filters - Optional filters (activity_id, is_archived)
+ * @returns {Promise} Response with conversation list
+ */
+export const getConversations = (filters = {}) =>
+  get('/conversations/', filters);
+
+/**
+ * Get a single conversation with all messages.
+ * @param {string} conversationId - Conversation UUID
+ * @returns {Promise} Response with conversation detail
+ */
+export const getConversation = (conversationId) =>
+  get(`/conversations/${conversationId}/`);
+
+/**
+ * Delete (archive) a conversation.
+ * @param {string} conversationId - Conversation UUID
+ * @returns {Promise} Response
+ */
+export const deleteConversation = (conversationId) =>
+  del(`/conversations/${conversationId}/`);
+
+/**
+ * Update conversation (title, archive status).
+ * @param {string} conversationId - Conversation UUID
+ * @param {Object} data - Update data (title, is_archived)
+ * @returns {Promise} Response with updated conversation
+ */
+export const updateConversation = (conversationId, data) =>
+  apiClient.patch(`/conversations/${conversationId}/`, data);
+
+/**
+ * Stream a message using Server-Sent Events (SSE).
+ *
+ * @param {string} conversationId - Conversation UUID
+ * @param {string} content - User message content
+ * @param {Function} onChunk - Callback for each token: (token) => void
+ * @param {Function} onComplete - Callback when done: () => void
+ * @param {Function} onError - Callback on error: (error) => void
+ * @returns {EventSource} The EventSource object (can be closed manually)
+ */
+export const streamMessage = (
+  conversationId,
+  content,
+  onChunk,
+  onComplete,
+  onError
+) => {
+  const state = store.getState();
+  const token = state?.auth?.token;
+
+  const url = `${API_BASE_URL}/conversations/${conversationId}/stream/`;
+
+  // Use fetch with ReadableStream for SSE
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token ? `Bearer ${token}` : '',
+    },
+    body: JSON.stringify({ content }),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      const readStream = () => {
+        reader
+          .read()
+          .then(({ done, value }) => {
+            if (done) {
+              onComplete();
+              return;
+            }
+
+            // Decode chunk
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const jsonStr = line.substring(6);
+                try {
+                  const data = JSON.parse(jsonStr);
+
+                  if (data.error) {
+                    onError(new Error(data.error));
+                    return;
+                  }
+
+                  if (data.done) {
+                    onComplete();
+                    return;
+                  }
+
+                  if (data.token) {
+                    onChunk(data.token);
+                  }
+                } catch (e) {
+                  // Ignore JSON parse errors for incomplete chunks
+                }
+              }
+            }
+
+            // Continue reading
+            readStream();
+          })
+          .catch((error) => {
+            onError(error);
+          });
+      };
+
+      readStream();
+    })
+    .catch((error) => {
+      onError(error);
+    });
+};
+
+/**
+ * Updated rubric assessment to accept conversation_id.
+ * @param {string} conversationId - Conversation UUID
+ * @param {number} activityId - Activity ID
+ * @param {number} scenarioId - Scenario ID (optional)
+ * @param {number} timeoutMs - Timeout in milliseconds
+ * @returns {Promise} Response with assessment result
+ */
+export const rubricAssessmentByConversation = ({
+  conversationId,
+  activityId,
+  scenarioId,
+  timeoutMs = 120000,
+}) =>
+  postLong(
+    `/activities/${encodeURIComponent(activityId)}/rubric_assessment/`,
+    { conversation_id: conversationId, scenario_id: scenarioId },
+    timeoutMs
+  );
+
 // Expose the client and base URL (rare cases)
 export { apiClient, API_BASE_URL };

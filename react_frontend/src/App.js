@@ -12,6 +12,7 @@ import SnackbarComponent from './components/SnackBarComponent';
 import ChatPage from './components/chat/chat';
 import ActivitiesHome from './components/rubrics/activities_home';
 import RubricsHome from './components/rubrics/rubrics_home';
+import ConversationsPage from './pages/ConversationsPage';
 
 const App = () => {
   return (
@@ -32,6 +33,7 @@ const App = () => {
             <Route index element={<HomeDefault />} />
             <Route path="manage" element={<Management />} />
             <Route path="talk" element={<ChatPage />} />
+            <Route path="conversations" element={<ConversationsPage />} />
             <Route path="manage_activities" element={<ActivitiesHome />} />
             <Route path="rubrics" element={<RubricsHome />} />
           </Route>

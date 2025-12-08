@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from .models import Conversation, Message
 
 
 class ThreadCreateSerializer(serializers.Serializer):
@@ -183,3 +184,97 @@ class SimpleRubricRequestSerializer(serializers.Serializer):
         allow_empty=False
     )
     scenario_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+# ============================================================================
+# Conversation & Message Serializers (New Chat Completions API)
+# ============================================================================
+
+class MessageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Message model.
+    """
+    class Meta:
+        model = Message
+        fields = ['id', 'role', 'content', 'created_at', 'tokens_used', 'model']
+        read_only_fields = ['id', 'created_at']
+
+
+class ConversationListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing conversations (without messages).
+    """
+    user_message_count = serializers.SerializerMethodField()
+    activity_title = serializers.CharField(source='activity.pre_brief', read_only=True)
+    scenario_role = serializers.CharField(source='scenario.role', read_only=True)
+
+    class Meta:
+        model = Conversation
+        fields = [
+            'id', 'title', 'created_at', 'updated_at',
+            'is_archived', 'user_message_count',
+            'activity_title', 'scenario_role'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_user_message_count(self, obj):
+        """Get count of user messages."""
+        return obj.get_user_message_count()
+
+
+class ConversationDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer for conversation detail (with nested messages).
+    """
+    messages = MessageSerializer(many=True, read_only=True)
+    user_message_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Conversation
+        fields = [
+            'id', 'title', 'created_at', 'updated_at',
+            'is_archived', 'activity', 'scenario',
+            'messages', 'user_message_count'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_user_message_count(self, obj):
+        """Get count of user messages."""
+        return obj.get_user_message_count()
+
+
+class ConversationCreateSerializer(serializers.Serializer):
+    """
+    Serializer for creating a new conversation.
+    """
+    activity_id = serializers.IntegerField(required=False, allow_null=True)
+    scenario_id = serializers.IntegerField(required=True)
+
+    def validate(self, attrs):
+        """Ensure at least scenario_id is provided."""
+        if not attrs.get('scenario_id'):
+            raise serializers.ValidationError(
+                "scenario_id is required to create a conversation."
+            )
+        return attrs
+
+
+class MessageStreamSerializer(serializers.Serializer):
+    """
+    Serializer for streaming message request.
+    """
+    content = serializers.CharField(required=True, allow_blank=False)
+
+    def validate_content(self, value):
+        """Ensure content is not empty."""
+        if not value.strip():
+            raise serializers.ValidationError("Message content cannot be empty.")
+        return value.strip()
+
+
+class ConversationUpdateSerializer(serializers.Serializer):
+    """
+    Serializer for updating conversation (title, archive status).
+    """
+    title = serializers.CharField(required=False, max_length=255)
+    is_archived = serializers.BooleanField(required=False)

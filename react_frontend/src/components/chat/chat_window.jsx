@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box, Grid, Paper, TextField, Typography, List, ListItem, ListItemText, Divider,
-  Avatar, Fab, Button, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, CircularProgress
+  Box, TextField, Typography, List, ListItem, ListItemText,
+  Avatar, Fab, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  IconButton, CircularProgress, Tooltip, Paper, Divider
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import SendIcon from '@mui/icons-material/Send';
@@ -9,23 +10,32 @@ import MicIcon from '@mui/icons-material/Mic';
 import ChatResultsDialog from './result_dialog';
 
 import {
-  createThread,
-  addMessage,
-  runThread,
-  getRunStatus,
-  get,                 // generic GET
-  rubricAssessment,    // NEW helper -> POST /activities/:id/rubric_assessment
+  createConversation,
+  getConversation,
+  streamMessage,
+  rubricAssessmentByConversation,
 } from '../../services/apiService';
 
-const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedActivityId }) => {
-  const [threadID, setThreadID] = useState(null);
-  const [messages, setMessages] = useState([]); // ALWAYS oldest -> newest
+import {
+  getCurrentConversationId,
+  setCurrentConversationId,
+  clearCurrentConversationId,
+} from '../../utils/storage';
+
+const ChatWindow = ({
+  selectedAssistantID,
+  scenarioName,
+  scenarioRole,
+  selectedActivityId,
+  onConversationEnd,
+}) => {
+  const [conversationId, setConversationId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-
-  // Holds either the new {categories, overall} object or (legacy) {evaluations:[...]}
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState('');
+  const [userMessageCount, setUserMessageCount] = useState(0);
   const [resultsRubrics, setResultsRubrics] = useState(null);
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState('');
@@ -33,79 +43,67 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
 
   const recognitionRef = useRef(null);
   const endOfMessagesRef = useRef(null);
-  const lastSpokenRef = useRef(null); // remember last spoken assistant message
+  const streamingContentRef = useRef('');
 
-  // Create a fresh thread on mount
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await createThread(); // POST /api/threads
-        if ((res.status === 201 || res.status === 200) && res.data?.thread_id) {
-          setThreadID(res.data.thread_id);
-        } else {
-          console.warn('Failed to create thread', res);
-        }
-      } catch (err) {
-        console.error('Error creating thread:', err);
-      }
-    })();
-  }, []);
+    const initializeConversation = async () => {
+      const savedId = getCurrentConversationId();
 
-  // Scroll to bottom whenever messages change
+      if (savedId) {
+        try {
+          const res = await getConversation(savedId);
+          if (res.status === 200 && res.data) {
+            setConversationId(savedId);
+            setMessages(res.data.messages || []);
+            setUserMessageCount(res.data.user_message_count || 0);
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to restore conversation:', error);
+          clearCurrentConversationId();
+        }
+      }
+
+      if (selectedActivityId && selectedAssistantID) {
+        try {
+          const res = await createConversation(selectedActivityId, selectedAssistantID);
+          if ((res.status === 201 || res.status === 200) && res.data?.id) {
+            const newId = res.data.id;
+            setConversationId(newId);
+            setCurrentConversationId(newId);
+            setMessages([]);
+            setUserMessageCount(0);
+          }
+        } catch (err) {
+          console.error('Error creating conversation:', err);
+        }
+      }
+    };
+
+    initializeConversation();
+  }, [selectedActivityId, selectedAssistantID]);
+
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingMessage]);
 
-  // Normalise server messages (ensure ms timestamp; sort oldest -> newest)
-  const normalise = (arr) => {
-    const toMs = (t) =>
-      typeof t === 'number' ? (t > 1e12 ? t : t * 1000) : Date.parse(t || 0);
-    return [...arr]
-      .map((m) => ({ ...m, created_at: toMs(m.created_at) || Date.now() }))
-      .sort((a, b) => a.created_at - b.created_at);
-  };
-
-  // Fetch & set messages for the thread
-  const refreshMessages = async (tid) => {
+  const speakLatestAssistant = useCallback((content) => {
+    if (!content) return;
     try {
-      const res = await get(`/threads/${encodeURIComponent(tid)}/messages`);
-      if (Array.isArray(res?.data)) {
-        const sorted = normalise(res.data);
-        setMessages(sorted);
-        return sorted;
-      }
-    } catch (err) {
-      console.error('Failed to refresh messages:', err);
-    }
-    return [];
-  };
-
-  // Speak latest assistant reply, but only once
-  const speakLatestAssistant = (arr) => {
-    const lastAssistant = [...arr].reverse().find((m) => m.role !== 'user' && m.message);
-    if (!lastAssistant) return;
-
-    const key = `${lastAssistant.created_at}|${lastAssistant.message}`;
-    if (lastSpokenRef.current === key) return; // already spoken
-
-    lastSpokenRef.current = key;
-    try {
-      const utter = new window.SpeechSynthesisUtterance(lastAssistant.message);
+      const utter = new window.SpeechSynthesisUtterance(content);
       utter.lang = 'en-GB';
-      window.speechSynthesis.cancel(); // stop any ongoing speech
+      window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utter);
     } catch (e) {
       console.warn('SpeechSynthesis failed:', e);
     }
-  };
+  }, []);
 
-  // Mic handler
   const handleMicClick = () => {
     setMicError('');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setMicError('Speech recognition not supported in this browser.');
-      alert('Speech recognition not supported in this browser.');
+      setMicError('Speech recognition not supported.');
       return;
     }
     if (isRecording) {
@@ -117,227 +115,276 @@ const ChatWindow = ({ selectedAssistantID, scenarioName, scenarioRole, selectedA
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-GB';
       recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
       recognition.onstart = () => setIsRecording(true);
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setNewMessage(transcript);
-      };
+      recognition.onresult = (event) => setNewMessage(event.results[0][0].transcript);
       recognition.onerror = (event) => {
-        console.error('Mic error:', event.error);
-        setMicError(`Speech recognition error: ${event.error}`);
+        setMicError(`Speech error: ${event.error}`);
         setIsRecording(false);
       };
       recognition.onend = () => setIsRecording(false);
-
       recognitionRef.current = recognition;
       recognition.start();
     } catch (err) {
-      setMicError('Mic could not be started. See console.');
-      console.error('Mic: Could not start:', err);
+      setMicError('Mic failed to start.');
       setIsRecording(false);
     }
   };
 
-  // Send message and run the assistant with full Activity + Scenario context
   const handleSendMessage = async () => {
     const text = newMessage.trim();
-    if (!text || !threadID) return;
+    if (!text || !conversationId) return;
 
-    try {
-      // Optimistic APPEND at the END (oldest -> newest)
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', message: text, created_at: Date.now() },
-      ]);
-      setNewMessage('');
-      setIsTyping(true);
+    const optimisticMessage = {
+      role: 'user',
+      content: text,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setNewMessage('');
+    setIsStreaming(true);
+    setStreamingMessage('');
+    streamingContentRef.current = '';
+    setUserMessageCount((prev) => prev + 1);
 
-      // 1) Add the user message to the OpenAI thread
-      await addMessage({ thread_id: threadID, role: 'user', content: text });
-
-      // 2) Start a run with BOTH IDs so the server injects full context
-      const runRes = await runThread({
-        thread_id: threadID,
-        activity_id: selectedActivityId,
-        scenario_id: selectedAssistantID,
-      });
-
-      const runId = runRes?.data?.run_id;
-      if (!runId) {
-        console.warn('No run_id returned', runRes);
-        setIsTyping(false);
-        return;
+    streamMessage(
+      conversationId,
+      text,
+      (token) => {
+        streamingContentRef.current += token;
+        setStreamingMessage(streamingContentRef.current);
+      },
+      () => {
+        const finalContent = streamingContentRef.current;
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: finalContent,
+          created_at: new Date().toISOString(),
+        }]);
+        speakLatestAssistant(finalContent);
+        setStreamingMessage('');
+        streamingContentRef.current = '';
+        setIsStreaming(false);
+      },
+      (error) => {
+        console.error('Streaming error:', error);
+        setIsStreaming(false);
+        setStreamingMessage('');
+        streamingContentRef.current = '';
+        alert(`Error: ${error.message}`);
       }
-
-      // 3) Poll run status until completed, then refresh and speak
-      const poll = async () => {
-        try {
-          const statusRes = await getRunStatus({ run_id: runId, thread_id: threadID });
-          const status = statusRes?.data?.status;
-          if (status === 'completed') {
-            const arr = await refreshMessages(threadID);
-            speakLatestAssistant(arr);
-            setIsTyping(false);
-          } else if (status === 'queued' || status === 'in_progress') {
-            setTimeout(poll, 1000);
-          } else {
-            setIsTyping(false);
-          }
-        } catch (e) {
-          console.error('Status polling error:', e);
-          setIsTyping(false);
-        }
-      };
-      poll();
-    } catch (err) {
-      console.error('Send/run failed:', err);
-      setIsTyping(false);
-    }
+    );
   };
 
-  // Assessment dialog — POST to the NEW activity endpoint, include scenario_id in body
   const openDialog = async () => {
+    if (userMessageCount < 5) {
+      alert('Please send at least 5 messages before requesting an assessment.');
+      return;
+    }
     try {
       setIsAssessing(true);
-
-      const cleaned = messages.map(({ role, message, created_at }) => ({ role, message, created_at }));
-
-      // New endpoint: per-category evaluation
-      const res = await rubricAssessment({
-        activity_id: selectedActivityId,
-        scenario_id: selectedAssistantID, // character used in this chat
-        messages: cleaned,
+      const res = await rubricAssessmentByConversation({
+        conversationId,
+        activityId: selectedActivityId,
+        scenarioId: selectedAssistantID,
       });
-
       if (res.status === 200) {
-        // New payload shape: { categories: [...], overall: {...} }
-        // Keep backward compat by also exposing .evaluations to the dialog.
         setResultsRubrics(res.data);
         setDialogOpen(true);
       }
     } catch (err) {
-      console.error('Rubric fetch failed:', err);
+      console.error('Assessment failed:', err);
+      alert('Failed to fetch assessment.');
     } finally {
       setIsAssessing(false);
     }
   };
 
+  const handleEndConversation = () => {
+    clearCurrentConversationId();
+    setConversationId(null);
+    setMessages([]);
+    setUserMessageCount(0);
+    setStreamingMessage('');
+    streamingContentRef.current = '';
+    if (onConversationEnd) onConversationEnd();
+  };
+
   return (
-    <Box>
-      <Grid container component={Paper} sx={{ width: '100%' }}>
-        {/* Header */}
-        <Grid item xs={12} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Avatar src={`${process.env.PUBLIC_URL}/avatars/${scenarioRole}.webp`}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
+      {/* Header with character name */}
+      <Paper
+        elevation={1}
+        sx={{
+          p: { xs: 1.5, md: 2 },
+          borderRadius: 0,
+          borderBottom: '1px solid #ddd',
+          flexShrink: 0,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Avatar
+              src={`${process.env.PUBLIC_URL}/avatars/${scenarioRole}.webp`}
+              sx={{ width: { xs: 36, md: 44 }, height: { xs: 36, md: 44 } }}
+            >
               <PersonIcon />
             </Avatar>
-            <Typography sx={{ pl: 2 }}>{scenarioName}</Typography>
+            <Box>
+              <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.125rem' }, fontWeight: 600 }}>
+                {scenarioName}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: { xs: '0.7rem', md: '0.75rem' } }}>
+                {scenarioRole}
+              </Typography>
+            </Box>
           </Box>
-          <Button onClick={openDialog} variant="contained" sx={{ backgroundColor: '#1976d2', color: 'white' }}>
-            {isAssessing ? <CircularProgress size={20} sx={{ color: 'white' }} /> : 'GPT Assessment'}
-          </Button>
-        </Grid>
-        <Divider sx={{ width: '100%' }} />
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Tooltip title={userMessageCount < 5 ? 'Send 5+ messages to assess' : ''}>
+              <span>
+                <Button
+                  onClick={openDialog}
+                  variant="contained"
+                  disabled={userMessageCount < 5 || isAssessing}
+                  size="small"
+                  sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}
+                >
+                  {isAssessing ? <CircularProgress size={16} sx={{ color: 'white' }} /> : 'Assessment'}
+                </Button>
+              </span>
+            </Tooltip>
+            <Button
+              onClick={handleEndConversation}
+              variant="outlined"
+              color="error"
+              size="small"
+              sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}
+            >
+              End Chat
+            </Button>
+          </Box>
+        </Box>
+      </Paper>
 
-        {/* Messages */}
-        <Grid item xs={12}>
-          <List sx={{ height: '60vh', overflowY: 'auto', px: 2 }}>
-            {messages.map((msg, idx) => {
-              const isUser = msg.role === 'user';
-              const time = (() => {
-                try {
-                  return new Date(msg.created_at).toLocaleTimeString();
-                } catch {
-                  return '';
-                }
-              })();
-              return (
-                <ListItem key={idx}>
-                  <Grid container justifyContent={isUser ? 'flex-end' : 'flex-start'}>
-                    <Grid item xs={12} sm={isUser ? 6 : 8}>
-                      <Box
-                        sx={{
-                          bgcolor: isUser ? '#E1F5FE' : '#F1F1F1',
-                          borderRadius: 2,
-                          px: 2,
-                          py: 1,
-                          textAlign: isUser ? 'right' : 'left',
-                        }}
-                      >
-                        <ListItemText primary={msg.message} secondary={time} />
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </ListItem>
-              );
-            })}
-            {isTyping && (
-              <ListItem>
-                <Grid container justifyContent="flex-start">
-                  <Grid item xs={12} sm={8}>
-                    <Box
-                      sx={{
-                        bgcolor: '#F1F1F1',
-                        borderRadius: 2,
-                        px: 2,
-                        py: 1,
-                        fontStyle: 'italic',
-                        color: 'grey',
+      {/* Messages area */}
+      <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: '#f5f5f5' }}>
+        <List sx={{ flexGrow: 1, overflowY: 'auto', p: { xs: 1, md: 2 } }}>
+          {messages.map((msg, idx) => {
+            const isUser = msg.role === 'user';
+            const time = (() => {
+              try {
+                return new Date(msg.created_at).toLocaleTimeString();
+              } catch {
+                return '';
+              }
+            })();
+            return (
+              <ListItem key={idx} sx={{ px: 0, py: 0.5 }}>
+                <Box sx={{ width: '100%', display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      maxWidth: { xs: '85%', sm: '75%', md: '65%' },
+                      bgcolor: isUser ? '#1976d2' : '#fff',
+                      color: isUser ? '#fff' : '#000',
+                      px: 2,
+                      py: 1,
+                      borderRadius: 2,
+                    }}
+                  >
+                    <ListItemText
+                      primary={msg.content}
+                      secondary={time}
+                      primaryTypographyProps={{
+                        sx: { fontSize: { xs: '0.875rem', md: '0.9375rem' }, wordBreak: 'break-word' }
                       }}
-                    >
-                      GPT is typing...
-                    </Box>
-                  </Grid>
-                </Grid>
+                      secondaryTypographyProps={{
+                        sx: { fontSize: { xs: '0.7rem', md: '0.75rem' }, color: isUser ? 'rgba(255,255,255,0.7)' : 'text.secondary' }
+                      }}
+                    />
+                  </Paper>
+                </Box>
               </ListItem>
-            )}
-            <div ref={endOfMessagesRef} />
-          </List>
-          <Divider />
+            );
+          })}
+          {isStreaming && (
+            <ListItem sx={{ px: 0, py: 0.5 }}>
+              <Box sx={{ width: '100%', display: 'flex', justifyContent: 'flex-start' }}>
+                <Paper
+                  elevation={1}
+                  sx={{
+                    maxWidth: { xs: '85%', sm: '75%', md: '65%' },
+                    bgcolor: '#fff',
+                    px: 2,
+                    py: 1,
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary', fontSize: { xs: '0.7rem', md: '0.75rem' } }}>
+                    {scenarioName} is replying...
+                  </Typography>
+                  <ListItemText
+                    primary={streamingMessage || '...'}
+                    primaryTypographyProps={{
+                      sx: { fontSize: { xs: '0.875rem', md: '0.9375rem' }, wordBreak: 'break-word' }
+                    }}
+                  />
+                </Paper>
+              </Box>
+            </ListItem>
+          )}
+          <div ref={endOfMessagesRef} />
+        </List>
+      </Box>
 
-          {/* Input Box */}
-          <Grid container spacing={2} sx={{ p: 2 }} alignItems="center">
-            <Grid item xs={10}>
-              <TextField
-                fullWidth
-                label={micError ? micError : 'Type something or use the mic...'}
-                value={newMessage}
-                disabled={!threadID}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                error={!!micError}
-                helperText={micError}
-              />
-            </Grid>
-            <Grid item xs={1} align="right">
-              <IconButton
-                onClick={handleMicClick}
-                color={isRecording ? 'secondary' : 'primary'}
-                disabled={!threadID}
-                aria-label={isRecording ? 'Stop recording' : 'Start recording'}
-              >
-                <MicIcon />
-              </IconButton>
-            </Grid>
-            <Grid item xs={1} align="right">
-              <Fab color="primary" onClick={handleSendMessage} disabled={!threadID}>
-                <SendIcon />
-              </Fab>
-            </Grid>
-          </Grid>
-        </Grid>
-      </Grid>
+      {/* Input area */}
+      <Paper elevation={3} sx={{ p: { xs: 1, md: 1.5 }, borderRadius: 0, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+          <TextField
+            fullWidth
+            size="small"
+            multiline
+            maxRows={3}
+            placeholder="Type a message..."
+            value={newMessage}
+            disabled={!conversationId || isStreaming}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !isStreaming) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
+            error={!!micError}
+            helperText={micError}
+            sx={{ '& .MuiOutlinedInput-root': { fontSize: { xs: '0.875rem', md: '1rem' } } }}
+          />
+          <IconButton
+            onClick={handleMicClick}
+            color={isRecording ? 'secondary' : 'primary'}
+            disabled={!conversationId || isStreaming}
+            size="small"
+          >
+            <MicIcon fontSize="small" />
+          </IconButton>
+          <Fab
+            color="primary"
+            onClick={handleSendMessage}
+            disabled={!conversationId || isStreaming || !newMessage.trim()}
+            size="small"
+            sx={{ minWidth: 40, width: 40, height: 40 }}
+          >
+            <SendIcon fontSize="small" />
+          </Fab>
+        </Box>
+      </Paper>
 
-      {/* Assessment Modal */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth>
-        <DialogTitle>GPT Assessment</DialogTitle>
+      {/* Assessment Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Assessment Results</DialogTitle>
         <DialogContent>
-          {/* Pass both props: new 'assessment' and legacy 'evaluations' for compatibility */}
           <ChatResultsDialog
-            assessment={resultsRubrics}                           // { categories, overall }
-            evaluations={resultsRubrics?.evaluations || []}        // legacy shape if needed
+            assessment={resultsRubrics}
+            evaluations={resultsRubrics?.evaluations || []}
             messages={messages}
           />
         </DialogContent>

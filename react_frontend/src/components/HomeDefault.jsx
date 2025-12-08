@@ -7,6 +7,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import GradingIcon from '@mui/icons-material/Grading';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PeopleIcon from '@mui/icons-material/People';
+import HistoryIcon from '@mui/icons-material/History';
 import { useSelector } from 'react-redux';
 
 const HomeDefault = () => {
@@ -44,6 +45,16 @@ const HomeDefault = () => {
       onClick: () => navigate('/home/talk'),
       enabled: true,
       featured: true,
+    },
+    {
+      title: 'Conversation History',
+      description: 'View and resume your past conversations',
+      icon: HistoryIcon,
+      color: '#36B37E',
+      bgGradient: 'linear-gradient(135deg, #36B37E 20%, #00875A 100%)',
+      onClick: () => navigate('/home/conversations'),
+      enabled: true,
+      featured: false,
     },
     {
       title: 'Manage Characters',
