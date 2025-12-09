@@ -99,7 +99,7 @@ const LoginPage = () => {
     }
 
     try {
-      const res = await post('/create_users', { username, email, password, role});
+      const res = await post('/create_users/', { username, email, password, confirmPassword, role});
 
       if (res.status === 201 || res.data?.message === 'User created') {
         setSignupSuccess('User created successfully. You may now login.');

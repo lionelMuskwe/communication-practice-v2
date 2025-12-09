@@ -26,7 +26,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         required=True,
         style={'input_type': 'password'}
     )
-    password_confirm = serializers.CharField(
+    confirmPassword = serializers.CharField(
         write_only=True,
         required=True,
         style={'input_type': 'password'}
@@ -34,7 +34,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password_confirm', 'role']
+        fields = ['username', 'email', 'password', 'confirmPassword', 'role']
 
     def validate_email(self, value):
         """Ensure email is unique."""
@@ -46,7 +46,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         """
         Validate passwords match and meet Django's password requirements.
         """
-        if attrs['password'] != attrs.pop('password_confirm'):
+        if attrs['password'] != attrs.pop('confirmPassword'):
             raise serializers.ValidationError({"password": "Passwords do not match."})
 
         # Use Django's password validators
@@ -54,15 +54,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        """
-        Create user with password hashed using Passlib's PBKDF2-SHA256.
-        This maintains compatibility with existing Flask users.
-        """
         password = validated_data.pop('password')
         user = User(**validated_data)
 
         # Use Passlib to match Flask's hashing
-        user.password = user.set_password(password)
+        user.set_password(password)
         user.save()
         return user
 
