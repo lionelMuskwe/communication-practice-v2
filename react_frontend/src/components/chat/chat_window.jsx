@@ -182,6 +182,13 @@ const ChatWindow = ({
     }
     try {
       setIsAssessing(true);
+
+      // Fetch fresh conversation data to ensure messages are up to date
+      const conversationRes = await getConversation(conversationId);
+      if (conversationRes.status === 200 && conversationRes.data) {
+        setMessages(conversationRes.data.messages || []);
+      }
+
       const res = await rubricAssessmentByConversation({
         conversationId,
         activityId: selectedActivityId,
@@ -379,18 +386,31 @@ const ChatWindow = ({
       </Paper>
 
       {/* Assessment Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>Assessment Results</DialogTitle>
-        <DialogContent>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        fullWidth
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            height: { xs: '100vh', sm: '95vh' },
+            maxHeight: { xs: '100vh', sm: '95vh' },
+            m: { xs: 0, sm: 2 },
+            borderRadius: { xs: 0, sm: 2 },
+          },
+        }}
+      >
+        <DialogTitle sx={{ p: { xs: 2, md: 3 } }}>Assessment Results</DialogTitle>
+        <DialogContent sx={{ p: { xs: 1, md: 2 }, overflow: 'auto' }}>
           <ChatResultsDialog
             assessment={resultsRubrics}
             evaluations={resultsRubrics?.evaluations || []}
             messages={messages}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Close</Button>
-          <Button onClick={() => window.print()}>Print</Button>
+        <DialogActions sx={{ p: { xs: 1.5, md: 2 }, borderTop: '1px solid #ddd' }}>
+          <Button onClick={() => setDialogOpen(false)} variant="outlined">Close</Button>
+          <Button onClick={() => window.print()} variant="contained">Print</Button>
         </DialogActions>
       </Dialog>
     </Box>
