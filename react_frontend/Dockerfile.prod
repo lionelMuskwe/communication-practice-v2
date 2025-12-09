@@ -2,19 +2,19 @@
 FROM node:20 AS builder
 WORKDIR /app
 
-# Build args passed from docker compose
-ARG REACT_APP_API_BASE=/api
-ARG PUBLIC_URL=/
-ENV REACT_APP_API_BASE=${REACT_APP_API_BASE}
-ENV PUBLIC_URL=${PUBLIC_URL}
-
 RUN npm cache clean --force
 COPY package*.json ./
 RUN npm install && npm install -g react-scripts
 
 COPY . .
 
-# This will now see REACT_APP_API_BASE and PUBLIC_URL
+# Build args passed from docker compose - declare AFTER copying files
+ARG REACT_APP_API_BASE
+ARG PUBLIC_URL
+ENV REACT_APP_API_BASE=${REACT_APP_API_BASE}
+ENV PUBLIC_URL=${PUBLIC_URL}
+
+# Build with environment variables embedded
 RUN npm run build
 
 # --- Stage 2: serve ---
