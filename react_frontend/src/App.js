@@ -18,7 +18,7 @@ const App = () => {
   return (
     <Provider store={store}>
       <SnackbarComponent />
-      <Router>
+      <Router basename={process.env.PUBLIC_URL || ''}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} /> {/* Registration route */}
