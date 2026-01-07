@@ -16,13 +16,21 @@ import {
   Checkbox,
   ListItemText,
   OutlinedInput,
+  Paper,
+  Chip,
+  Tooltip,
+  Grid,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import PersonIcon from '@mui/icons-material/Person';
+import CategoryIcon from '@mui/icons-material/Category';
 import { get, post, del } from '../../services/apiService';
 import { useDispatch } from 'react-redux';
 import { showSnackbar } from '../../features/snackbarSlice';
+import { commonStyles } from '../../theme/managementTheme';
 
 const ActivitiesHome = () => {
   const [activities, setActivities] = useState([]);
@@ -99,80 +107,267 @@ const ActivitiesHome = () => {
   };
 
   return (
-    <Box p={4}>
-      <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Typography variant="h4">Activities</Typography>
-        <Button startIcon={<AddIcon />} onClick={openAddDialog} variant="contained">
-          Add Activity
-        </Button>
+    <Box sx={{ ...commonStyles.pageContainer, minHeight: 'auto' }}>
+      {/* Page Header */}
+      <Box sx={commonStyles.pageHeader}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+            Activity Management
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Create and organize practice activities for communication scenarios
+          </Typography>
+        </Box>
+        <Tooltip title="Add New Activity" arrow>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={openAddDialog}
+            startIcon={<AddIcon />}
+            sx={commonStyles.primaryButton}
+          >
+            Add Activity
+          </Button>
+        </Tooltip>
       </Box>
 
-      <Box mt={3}>
+      {/* Activities Grid */}
+      <Grid container spacing={3}>
         {activities.map((activity) => (
-          <Box key={activity.id} mb={2} p={2} border={1} borderRadius={2}>
-            <Typography variant="subtitle1">{activity.pre_brief}</Typography>
-            <Typography variant="body2">
-              Character: {characters.find(c => c.id === activity.character_id)?.scenario_text || 'N/A'}
-            </Typography>
-            <Typography variant="body2">
-              Categories: {activity.categories.map(cid => categories.find(cat => cat.id === cid)?.name).join(', ')}
-            </Typography>
-            <Box mt={1}>
-              <IconButton onClick={() => openEditDialog(activity)}><EditIcon /></IconButton>
-              <IconButton onClick={() => handleDelete(activity.id)} color="error"><DeleteIcon /></IconButton>
-            </Box>
-          </Box>
+          <Grid item xs={12} md={6} lg={4} key={activity.id}>
+            <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column' }}>
+              {/* Activity Header */}
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                <Box sx={{
+                  backgroundColor: 'primary.light',
+                  borderRadius: 2,
+                  p: 1,
+                  mr: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <AssignmentIcon sx={{ color: 'white' }} />
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'text.primary', lineHeight: 1.4 }}>
+                    Activity Brief
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Activity Content */}
+              <Box sx={{ flex: 1, mb: 2 }}>
+                <Typography variant="body2" sx={{ color: 'text.primary', mb: 2, lineHeight: 1.6 }}>
+                  {activity.pre_brief}
+                </Typography>
+
+                {/* Character Info */}
+                <Paper elevation={0} sx={{ ...commonStyles.paperElevated, mb: 1.5, p: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PersonIcon fontSize="small" sx={{ color: 'primary.main' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                      Character:
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 500 }}>
+                      {characters.find(c => c.id === activity.character_id)?.scenario_text || 'N/A'}
+                    </Typography>
+                  </Box>
+                </Paper>
+
+                {/* Categories */}
+                <Paper elevation={0} sx={{ ...commonStyles.paperElevated, p: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <CategoryIcon fontSize="small" sx={{ color: 'primary.main' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                      Categories:
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {activity.categories.length > 0 ? (
+                      activity.categories.map(cid => {
+                        const cat = categories.find(cat => cat.id === cid);
+                        return cat ? (
+                          <Chip
+                            key={cid}
+                            label={cat.name}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            sx={{ fontSize: '0.75rem' }}
+                          />
+                        ) : null;
+                      })
+                    ) : (
+                      <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                        No categories assigned
+                      </Typography>
+                    )}
+                  </Box>
+                </Paper>
+              </Box>
+
+              {/* Action Buttons */}
+              <Box sx={{ ...commonStyles.actionButtons, pt: 2, borderTop: '1px solid #e0e0e0' }}>
+                <Tooltip title="Edit Activity" arrow>
+                  <IconButton
+                    onClick={() => openEditDialog(activity)}
+                    color="primary"
+                    size="small"
+                    sx={commonStyles.iconButton}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete Activity" arrow>
+                  <IconButton
+                    onClick={() => handleDelete(activity.id)}
+                    color="error"
+                    size="small"
+                    sx={commonStyles.iconButton}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Paper>
+          </Grid>
         ))}
-      </Box>
+      </Grid>
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{form.id ? 'Edit Activity' : 'Add Activity'}</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Pre-Brief"
-            fullWidth
-            margin="normal"
-            multiline
-            rows={3}
-            value={form.pre_brief}
-            onChange={(e) => setForm({ ...form, pre_brief: e.target.value })}
-          />
+      {/* Empty State */}
+      {activities.length === 0 && (
+        <Paper elevation={0} sx={{ ...commonStyles.paperCard, textAlign: 'center', py: 8 }}>
+          <AssignmentIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" sx={{ color: 'text.secondary', mb: 1 }}>
+            No Activities Yet
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.disabled', mb: 3 }}>
+            Create your first activity to get started
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={openAddDialog}
+            startIcon={<AddIcon />}
+            sx={commonStyles.primaryButton}
+          >
+            Add Activity
+          </Button>
+        </Paper>
+      )}
 
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Character</InputLabel>
-            <Select
-              value={form.character_id}
-              onChange={(e) => setForm({ ...form, character_id: e.target.value })}
-              input={<OutlinedInput label="Character" />}
-            >
-              {characters.map((char) => (
-                <MenuItem key={char.id} value={char.id}>{char.scenario_text}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        fullWidth
+        maxWidth="sm"
+        sx={commonStyles.modernDialog}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            {form.id ? 'Edit Activity' : 'Add New Activity'}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {form.id ? 'Update activity details' : 'Create a new practice activity'}
+          </Typography>
+        </DialogTitle>
 
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Categories</InputLabel>
-            <Select
-              multiple
-              value={form.categories}
-              onChange={(e) => setForm({ ...form, categories: e.target.value })}
-              input={<OutlinedInput label="Categories" />}
-              renderValue={(selected) => selected.map(cid => categories.find(c => c.id === cid)?.name).join(', ')}
-            >
-              {categories.map((cat) => (
-                <MenuItem key={cat.id} value={cat.id}>
-                  <Checkbox checked={form.categories.includes(cat.id)} />
-                  <ListItemText primary={cat.name} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+        <DialogContent sx={{ pt: 2 }}>
+          <Paper elevation={0} sx={{ ...commonStyles.paperElevated, mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AssignmentIcon fontSize="small" />
+              Activity Brief
+            </Typography>
+            <TextField
+              label="Pre-Brief"
+              fullWidth
+              multiline
+              rows={4}
+              value={form.pre_brief}
+              onChange={(e) => setForm({ ...form, pre_brief: e.target.value })}
+              sx={commonStyles.formField}
+              placeholder="Describe the activity scenario and what the participant should expect..."
+            />
+          </Paper>
+
+          <Paper elevation={0} sx={{ ...commonStyles.paperElevated, mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PersonIcon fontSize="small" />
+              Associated Character
+            </Typography>
+            <FormControl fullWidth sx={commonStyles.formField}>
+              <InputLabel>Character</InputLabel>
+              <Select
+                value={form.character_id}
+                onChange={(e) => setForm({ ...form, character_id: e.target.value })}
+                input={<OutlinedInput label="Character" />}
+              >
+                {characters.map((char) => (
+                  <MenuItem key={char.id} value={char.id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PersonIcon fontSize="small" sx={{ color: 'primary.main' }} />
+                      {char.scenario_text}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Paper>
+
+          <Paper elevation={0} sx={commonStyles.paperElevated}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CategoryIcon fontSize="small" />
+              Categories
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 2, display: 'block' }}>
+              Select one or more categories for this activity
+            </Typography>
+            <FormControl fullWidth sx={commonStyles.formField}>
+              <InputLabel>Categories</InputLabel>
+              <Select
+                multiple
+                value={form.categories}
+                onChange={(e) => setForm({ ...form, categories: e.target.value })}
+                input={<OutlinedInput label="Categories" />}
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selected.map(cid => {
+                      const cat = categories.find(c => c.id === cid);
+                      return cat ? (
+                        <Chip key={cid} label={cat.name} size="small" color="primary" variant="outlined" />
+                      ) : null;
+                    })}
+                  </Box>
+                )}
+              >
+                {categories.map((cat) => (
+                  <MenuItem key={cat.id} value={cat.id}>
+                    <Checkbox checked={form.categories.includes(cat.id)} color="primary" />
+                    <ListItemText primary={cat.name} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Paper>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained">Save</Button>
+        <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e0e0e0' }}>
+          <Button
+            onClick={() => setOpenDialog(false)}
+            color="inherit"
+            sx={commonStyles.secondaryButton}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            variant="contained"
+            color="primary"
+            sx={commonStyles.primaryButton}
+          >
+            {form.id ? 'Update Activity' : 'Create Activity'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

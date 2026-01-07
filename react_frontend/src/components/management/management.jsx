@@ -16,17 +16,23 @@ import {
   Tooltip,
   Avatar,
   Tabs,
-  Tab
+  Tab,
+  Paper,
+  Chip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PersonIcon from '@mui/icons-material/Person';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ChatIcon from '@mui/icons-material/Chat';
 import { DataGrid } from '@mui/x-data-grid';
-import { post, put, get, del } from '../../services/apiService'; // Ensure the correct path
+import { post, put, get, del } from '../../services/apiService';
 import { showSnackbar } from '../../features/snackbarSlice';
 import { useDispatch } from 'react-redux';
-import './management.css'; // Ensure the CSS file path is correct
+import { commonStyles } from '../../theme/managementTheme';
+import './management.css';
 
 
 
@@ -153,19 +159,32 @@ const Management = () => {
       field: 'actions',
       headerName: 'Actions',
       sortable: false,
-      filterable: false, // Disable filtering (search)
+      filterable: false,
       resizable: false,
-      flex: 1, // 10% relative share
+      flex: 1,
       renderCell: (params) => (
-        <>
-          <IconButton onClick={() => handleEdit(params.row.id)}>
-            <EditIcon />
-          </IconButton>
-          <IconButton onClick={() => handleDelete(params.row.id)}>
-            <DeleteIcon />
-          </IconButton>
-
-        </>
+        <Box sx={commonStyles.actionButtons}>
+          <Tooltip title="Edit Character" arrow>
+            <IconButton
+              onClick={() => handleEdit(params.row.id)}
+              color="primary"
+              size="small"
+              sx={commonStyles.iconButton}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete Character" arrow>
+            <IconButton
+              onClick={() => handleDelete(params.row.id)}
+              color="error"
+              size="small"
+              sx={commonStyles.iconButton}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
       ),
     }
   ];
@@ -259,48 +278,87 @@ const Management = () => {
   };
 
   return (
-    <Box sx={{ padding: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h4">Characters </Typography>
-        <Tooltip title="Add Assistant">
-          <IconButton color="primary" onClick={handleClickOpen}>
-            <AddIcon />
-          </IconButton>
+    <Box sx={{ ...commonStyles.pageContainer, minHeight: 'auto' }}>
+      {/* Page Header */}
+      <Box sx={commonStyles.pageHeader}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+            Character Management
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Create and manage AI characters for your communication scenarios
+          </Typography>
+        </Box>
+        <Tooltip title="Add New Character" arrow>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleClickOpen}
+            startIcon={<AddIcon />}
+            sx={commonStyles.primaryButton}
+          >
+            Add Character
+          </Button>
         </Tooltip>
       </Box>
-      <Box sx={{ height: '300px', width: '100%' }}>
-      <DataGrid
-        autoHeight
-        rows={assistants}
-        columns={columns} // Pass the columns here
-        pageSize={10}
-        rowsPerPageOptions={[5, 10, 20]}
-        getRowId={(row) => row.id}
-        disableColumnMenu
-        disableSelectionOnClick
-      />
-    </Box>
-      {/* Dialog for adding/editing assistants */}
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-        <DialogTitle>{state?.id ? 'Edit Assistant' : 'Add Assistant'}</DialogTitle>
-        <DialogContent>
-            <Tabs
-              value={tabIndex}
-              onChange={(e, newValue) => setTabIndex(newValue)}
-              indicatorColor="primary"
-              textColor="primary"
-              variant="fullWidth"
-              sx={{ mb: 2 }}
-            >
-              <Tab label="General" />
-              <Tab label="Configuration" />
-              <Tab label="Communication" />
-            </Tabs>
 
-            <form className="management-form">
+      {/* DataGrid wrapped in Paper */}
+      <Paper elevation={0} sx={commonStyles.dataGridContainer}>
+        <DataGrid
+          autoHeight
+          rows={assistants}
+          columns={columns}
+          pageSize={10}
+          rowsPerPageOptions={[5, 10, 20]}
+          getRowId={(row) => row.id}
+          disableColumnMenu
+          disableSelectionOnClick
+          sx={{
+            '& .MuiDataGrid-cell': {
+              py: 2,
+            },
+          }}
+        />
+      </Paper>
+      {/* Modern Dialog for adding/editing assistants */}
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        maxWidth="md"
+        fullWidth
+        sx={commonStyles.modernDialog}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            {state?.id ? 'Edit Character' : 'Add New Character'}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {state?.id ? 'Update character details and preferences' : 'Configure your new AI character'}
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: 2 }}>
+          <Tabs
+            value={tabIndex}
+            onChange={(e, newValue) => setTabIndex(newValue)}
+            indicatorColor="primary"
+            textColor="primary"
+            variant="fullWidth"
+            sx={commonStyles.modernTabs}
+          >
+            <Tab icon={<PersonIcon />} iconPosition="start" label="General" />
+            <Tab icon={<SettingsIcon />} iconPosition="start" label="Configuration" />
+            <Tab icon={<ChatIcon />} iconPosition="start" label="Communication" />
+          </Tabs>
+
+          <Box sx={{ mt: 3 }}>
             <TabPanel value={tabIndex} index={0}>
+              <Paper elevation={0} sx={{ ...commonStyles.paperElevated, mb: 3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary' }}>
+                  Character Profile
+                </Typography>
                 <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                  <FormControl fullWidth variant="outlined">
+                  <FormControl fullWidth variant="outlined" sx={commonStyles.formField}>
                     <InputLabel>Avatar</InputLabel>
                     <Select
                       value={state.role}
@@ -309,14 +367,15 @@ const Management = () => {
                     >
                       {roles.map((role) => (
                         <MenuItem key={role} value={role}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                             <Avatar
-                              alt="User Avatar"
+                              alt={role}
                               src={`${process.env.PUBLIC_URL}/avatars/${role}.webp`}
+                              sx={{ width: 32, height: 32 }}
                             >
                               <PersonIcon />
                             </Avatar>
-
+                            <Typography>{role}</Typography>
                           </Box>
                         </MenuItem>
                       ))}
@@ -330,10 +389,18 @@ const Management = () => {
                     variant="outlined"
                     value={state.scenario_text}
                     onChange={(e) => dispatch({ type: 'SET_NAME', payload: e.target.value })}
+                    sx={commonStyles.formField}
+                    placeholder="e.g., Dr. Emily Chen"
                   />
                 </Box>
+              </Paper>
 
-                <FormControl fullWidth variant="outlined">
+              <Paper elevation={0} sx={commonStyles.paperElevated}>
+                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <RecordVoiceOverIcon fontSize="small" />
+                  Voice Settings
+                </Typography>
+                <FormControl fullWidth variant="outlined" sx={commonStyles.formField}>
                   <InputLabel>Voice</InputLabel>
                   <Select
                     value={state.voice || 'nova'}
@@ -342,50 +409,79 @@ const Management = () => {
                   >
                     {voices.map((voice) => (
                       <MenuItem key={voice.value} value={voice.value}>
-                        {voice.label}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip label={voice.label} size="small" color="primary" variant="outlined" />
+                        </Box>
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
-              </TabPanel>
+              </Paper>
+            </TabPanel>
 
-              <TabPanel value={tabIndex} index={1}>
+            <TabPanel value={tabIndex} index={1}>
+              <Paper elevation={0} sx={commonStyles.paperElevated}>
+                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary' }}>
+                  Character Instructions
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 2, display: 'block' }}>
+                  Define the character's behavior, personality, and specific instructions
+                </Typography>
                 <TextField
-                  margin="dense"
                   label="Configuration"
                   type="text"
                   fullWidth
                   variant="outlined"
                   multiline
-                  rows={4}
+                  rows={8}
                   value={state.additional_instructions}
                   onChange={(e) => dispatch({ type: 'SET_DESCRIPTION', payload: e.target.value })}
+                  sx={commonStyles.formField}
+                  placeholder="Enter character instructions, personality traits, and behavioral guidelines..."
                 />
-              </TabPanel>
+              </Paper>
+            </TabPanel>
 
-              <TabPanel value={tabIndex} index={2}>
+            <TabPanel value={tabIndex} index={2}>
+              <Paper elevation={0} sx={commonStyles.paperElevated}>
+                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary' }}>
+                  Communication Style
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 2, display: 'block' }}>
+                  Specify how the character should communicate and interact
+                </Typography>
                 <TextField
-                  margin="dense"
                   label="Communication Preferences"
                   type="text"
                   fullWidth
                   variant="outlined"
                   multiline
-                  rows={4}
+                  rows={8}
                   value={state.communication_preferences}
                   onChange={(e) => dispatch({ type: 'SET_Communication_Preferences', payload: e.target.value })}
+                  sx={commonStyles.formField}
+                  placeholder="Define communication patterns, tone, formality level, and interaction style..."
                 />
-              </TabPanel>
-            </form>
-          </DialogContent>
+              </Paper>
+            </TabPanel>
+          </Box>
+        </DialogContent>
 
-
-        <DialogActions>
-          <Button onClick={handleClose} color="primary">
+        <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e0e0e0' }}>
+          <Button
+            onClick={handleClose}
+            color="inherit"
+            sx={commonStyles.secondaryButton}
+          >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} color="primary">
-            Save
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            color="primary"
+            sx={commonStyles.primaryButton}
+          >
+            {state?.id ? 'Update Character' : 'Create Character'}
           </Button>
         </DialogActions>
       </Dialog>
