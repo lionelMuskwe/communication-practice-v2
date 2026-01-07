@@ -4,6 +4,9 @@ OpenAI Integration Views.
 Handles conversation management and SSE streaming for Chat Completions API.
 """
 import logging
+import threading
+import time
+from typing import Dict, Tuple, Optional
 from django.http import StreamingHttpResponse
 from django.db import transaction
 from rest_framework import status, viewsets
@@ -30,6 +33,99 @@ from .serializers import (
 
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# TTS Audio Cache
+# ============================================================================
+
+class TTSAudioCache:
+    """
+    In-memory cache for TTS audio generation.
+
+    Stores audio bytes with expiration to reduce latency.
+    Thread-safe for concurrent access.
+    """
+    def __init__(self, ttl_seconds: int = 60):
+        self._cache: Dict[str, Tuple[bytes, float]] = {}
+        self._lock = threading.Lock()
+        self._ttl = ttl_seconds
+
+    def set(self, message_id: str, audio_data: bytes):
+        """Store audio data with timestamp."""
+        with self._lock:
+            self._cache[message_id] = (audio_data, time.time())
+            logger.info(f"[TTS Cache] Stored audio for message {message_id} ({len(audio_data)} bytes)")
+
+    def get(self, message_id: str) -> Optional[bytes]:
+        """Retrieve audio data if not expired."""
+        with self._lock:
+            if message_id not in self._cache:
+                return None
+
+            audio_data, timestamp = self._cache[message_id]
+
+            # Check if expired
+            if time.time() - timestamp > self._ttl:
+                del self._cache[message_id]
+                logger.info(f"[TTS Cache] Expired audio for message {message_id}")
+                return None
+
+            logger.info(f"[TTS Cache] Cache hit for message {message_id}")
+            return audio_data
+
+    def cleanup_expired(self):
+        """Remove expired entries."""
+        with self._lock:
+            current_time = time.time()
+            expired = [
+                msg_id for msg_id, (_, timestamp) in self._cache.items()
+                if current_time - timestamp > self._ttl
+            ]
+            for msg_id in expired:
+                del self._cache[msg_id]
+            if expired:
+                logger.info(f"[TTS Cache] Cleaned up {len(expired)} expired entries")
+
+
+# Global TTS cache instance
+tts_cache = TTSAudioCache(ttl_seconds=60)
+
+
+def pregenerate_tts_audio(message_id: str, text: str, voice: str):
+    """
+    Background thread function to pre-generate TTS audio.
+
+    Args:
+        message_id: Message UUID to cache audio under
+        text: Text content to convert to speech
+        voice: OpenAI voice ID
+    """
+    try:
+        logger.info(f"[TTS Pregeneration] Starting for message {message_id}")
+
+        # Generate audio (this blocks until complete)
+        audio_chunks = []
+        for chunk in TextToSpeechService.generate_speech(
+            text=text,
+            voice=voice,
+            model='tts-1',
+            response_format='mp3',
+            speed=1.0
+        ):
+            audio_chunks.append(chunk)
+
+        # Combine all chunks
+        audio_data = b''.join(audio_chunks)
+
+        # Store in cache
+        tts_cache.set(str(message_id), audio_data)
+
+        logger.info(f"[TTS Pregeneration] Completed for message {message_id} ({len(audio_data)} bytes)")
+
+    except Exception as e:
+        logger.error(f"[TTS Pregeneration] Failed for message {message_id}: {e}")
+        # Silent failure - audio will be generated on-demand if needed
 
 
 # ============================================================================
@@ -283,6 +379,16 @@ class ConversationMessageStreamView(APIView):
                                 # Update conversation timestamp
                                 conversation.save(update_fields=['updated_at'])
 
+                                # Start TTS generation in background thread (parallel processing)
+                                voice = conversation.scenario.voice if conversation.scenario else 'nova'
+                                tts_thread = threading.Thread(
+                                    target=pregenerate_tts_audio,
+                                    args=(str(assistant_message.id), full_content, voice),
+                                    daemon=True
+                                )
+                                tts_thread.start()
+                                logger.info(f"[TTS] Started background generation for message {assistant_message.id}")
+
                                 # Send message ID to frontend for audio fetch BEFORE done
                                 yield f"data: {json.dumps({'message_id': str(assistant_message.id)})}\n\n"
 
@@ -386,8 +492,55 @@ class MessageAudioStreamView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Check cache first (may already be generated in background)
+        cached_audio = tts_cache.get(str(message_id))
+
+        if cached_audio:
+            # Cache hit - return immediately
+            logger.info(f"[TTS] Serving cached audio for message {message_id}")
+
+            def cached_audio_stream():
+                # Yield in chunks for consistency with streaming
+                chunk_size = 8192
+                for i in range(0, len(cached_audio), chunk_size):
+                    yield cached_audio[i:i + chunk_size]
+
+            response = StreamingHttpResponse(
+                cached_audio_stream(),
+                content_type='audio/mpeg'
+            )
+            response['Cache-Control'] = 'no-cache'
+            response['X-Accel-Buffering'] = 'no'
+            return response
+
+        # Cache miss - wait briefly for background generation, then generate on-demand
+        logger.info(f"[TTS] Cache miss for message {message_id}, waiting for background generation...")
+
+        # Wait up to 2 seconds for background thread to complete
+        for attempt in range(20):  # 20 * 0.1s = 2s max
+            time.sleep(0.1)
+            cached_audio = tts_cache.get(str(message_id))
+            if cached_audio:
+                logger.info(f"[TTS] Background generation completed after {(attempt + 1) * 0.1:.1f}s")
+
+                def cached_audio_stream():
+                    chunk_size = 8192
+                    for i in range(0, len(cached_audio), chunk_size):
+                        yield cached_audio[i:i + chunk_size]
+
+                response = StreamingHttpResponse(
+                    cached_audio_stream(),
+                    content_type='audio/mpeg'
+                )
+                response['Cache-Control'] = 'no-cache'
+                response['X-Accel-Buffering'] = 'no'
+                return response
+
+        # Background generation failed or too slow - generate on-demand
+        logger.warning(f"[TTS] Background generation timeout, generating on-demand for message {message_id}")
+
         def audio_stream():
-            """Generator for audio binary stream."""
+            """Generator for on-demand audio generation."""
             try:
                 stream = TextToSpeechService.generate_speech(
                     text=message.content,
@@ -401,7 +554,7 @@ class MessageAudioStreamView(APIView):
                     yield chunk
 
             except Exception as e:
-                logger.error(f"Audio streaming error: {e}")
+                logger.error(f"[TTS] Audio streaming error: {e}")
                 # Can't send error in binary stream, log only
 
         response = StreamingHttpResponse(
