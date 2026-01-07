@@ -7,6 +7,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ConversationViewSet,
     ConversationMessageStreamView,
+    MessageAudioStreamView,
     rubric_assessment,
     rubric_responses,
 )
@@ -24,6 +25,13 @@ urlpatterns = [
         'conversations/<uuid:pk>/stream/',
         ConversationMessageStreamView.as_view(),
         name='conversation-stream'
+    ),
+
+    # Message audio endpoint
+    path(
+        'conversations/<uuid:pk>/audio/<uuid:message_id>/',
+        MessageAudioStreamView.as_view(),
+        name='message-audio'
     ),
 
     # Rubric assessment

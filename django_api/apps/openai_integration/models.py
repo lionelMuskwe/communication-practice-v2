@@ -118,7 +118,7 @@ class Message(models.Model):
         help_text='Number of tokens used for this message'
     )
     model = models.CharField(
-        max_length=50,
+        max_length=100,
         blank=True,
         help_text='Model used to generate this message'
     )

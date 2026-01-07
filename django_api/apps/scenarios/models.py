@@ -27,6 +27,19 @@ class AssistantScenario(models.Model):
         blank=True,
         help_text="How the patient prefers to communicate"
     )
+    voice = models.CharField(
+        max_length=20,
+        choices=[
+            ('alloy', 'Alloy'),
+            ('echo', 'Echo'),
+            ('fable', 'Fable'),
+            ('onyx', 'Onyx'),
+            ('nova', 'Nova'),
+            ('shimmer', 'Shimmer'),
+        ],
+        default='nova',
+        help_text="OpenAI TTS voice for this character"
+    )
     openid = models.TextField(
         help_text="OpenAI Assistant ID for this scenario"
     )

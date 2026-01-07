@@ -21,7 +21,7 @@ class AssistantScenarioListSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssistantScenario
         fields = [
-            'id', 'scenario_text', 'role', 'enable',
+            'id', 'scenario_text', 'role', 'voice', 'enable',
             'openid', 'tags', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'openid', 'created_at', 'updated_at']
@@ -39,7 +39,7 @@ class AssistantScenarioDetailSerializer(serializers.ModelSerializer):
         model = AssistantScenario
         fields = [
             'id', 'scenario_text', 'additional_instructions',
-            'enable', 'role', 'communication_preferences',
+            'enable', 'role', 'voice', 'communication_preferences',
             'openid', 'tags', 'rubrics', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'openid', 'created_at', 'updated_at']
@@ -73,7 +73,7 @@ class AssistantScenarioCreateSerializer(serializers.ModelSerializer):
         model = AssistantScenario
         fields = [
             'scenario_text', 'additional_instructions',
-            'enable', 'role', 'communication_preferences',
+            'enable', 'role', 'voice', 'communication_preferences',
             'tags', 'rubrics'
         ]
 
@@ -110,7 +110,7 @@ class AssistantScenarioUpdateSerializer(serializers.ModelSerializer):
         model = AssistantScenario
         fields = [
             'scenario_text', 'additional_instructions',
-            'enable', 'role', 'communication_preferences',
+            'enable', 'role', 'voice', 'communication_preferences',
             'tags', 'rubrics'
         ]
 

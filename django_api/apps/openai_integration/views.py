@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from apps.scenarios.models import AssistantScenario
 from apps.activities.models import Activity
 from .models import Conversation, Message
-from .services import ChatCompletionService, build_full_context, get_openai_model
+from .services import ChatCompletionService, TextToSpeechService, build_full_context, get_openai_model
 from .evaluators import CategoryRubricEvaluator, SimpleRubricEvaluator
 from .serializers import (
     ConversationListSerializer,
@@ -263,34 +263,49 @@ class ConversationMessageStreamView(APIView):
                 )
 
                 for chunk in stream:
-                    yield chunk
-
                     # Extract content from chunk
                     if chunk.startswith('data: '):
                         import json
                         try:
                             data = json.loads(chunk[6:])
-                            if 'token' in data:
+
+                            # Check if this is the done event
+                            if data.get('done'):
+                                # Don't yield done yet - save message first
+                                # Save assistant message
+                                assistant_message = Message.objects.create(
+                                    conversation=conversation,
+                                    role='assistant',
+                                    content=full_content,
+                                    model=get_openai_model()
+                                )
+
+                                # Update conversation timestamp
+                                conversation.save(update_fields=['updated_at'])
+
+                                # Send message ID to frontend for audio fetch BEFORE done
+                                yield f"data: {json.dumps({'message_id': str(assistant_message.id)})}\n\n"
+
+                                logger.info(
+                                    f"Conversation {conversation.id}: "
+                                    f"User message {user_message.id}, "
+                                    f"Assistant message {assistant_message.id}"
+                                )
+
+                                # NOW yield the done event
+                                yield chunk
+                                break
+
+                            elif 'token' in data:
                                 full_content += data['token']
+                                # Yield token chunks immediately
+                                yield chunk
                         except json.JSONDecodeError:
-                            pass
-
-                # Save assistant message after streaming completes
-                assistant_message = Message.objects.create(
-                    conversation=conversation,
-                    role='assistant',
-                    content=full_content,
-                    model=get_openai_model()
-                )
-
-                # Update conversation timestamp
-                conversation.save(update_fields=['updated_at'])
-
-                logger.info(
-                    f"Conversation {conversation.id}: "
-                    f"User message {user_message.id}, "
-                    f"Assistant message {assistant_message.id}"
-                )
+                            # Yield non-JSON chunks as-is
+                            yield chunk
+                    else:
+                        # Yield non-data chunks as-is
+                        yield chunk
 
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
@@ -300,6 +315,98 @@ class ConversationMessageStreamView(APIView):
         response = StreamingHttpResponse(
             event_stream(),
             content_type='text/event-stream'
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
+
+
+# ============================================================================
+# Message Audio Streaming View
+# ============================================================================
+
+class MessageAudioStreamView(APIView):
+    """
+    Stream TTS audio for a specific assistant message.
+
+    GET /api/conversations/<uuid>/audio/<message_id>/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, message_id):
+        """
+        Stream audio for an assistant message.
+
+        Query params:
+        - voice: Override voice (optional, uses scenario default)
+        - speed: Playback speed 0.25-4.0 (optional, default 1.0)
+        """
+        # Validate conversation exists and belongs to user
+        try:
+            conversation = Conversation.objects.select_related(
+                'scenario'
+            ).get(pk=pk, user=request.user)
+        except Conversation.DoesNotExist:
+            return Response(
+                {"message": "Conversation not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Validate message exists and belongs to conversation
+        try:
+            message = Message.objects.get(
+                id=message_id,
+                conversation=conversation,
+                role='assistant'
+            )
+        except Message.DoesNotExist:
+            return Response(
+                {"message": "Message not found or not an assistant message"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get voice from scenario or query param override
+        voice = request.query_params.get('voice')
+        if not voice and conversation.scenario:
+            voice = conversation.scenario.voice
+        voice = voice or 'nova'  # Fallback default
+
+        # Get speed parameter
+        try:
+            speed = float(request.query_params.get('speed', 1.0))
+            speed = max(0.25, min(4.0, speed))  # Clamp to valid range
+        except ValueError:
+            speed = 1.0
+
+        # Validate voice
+        valid_voices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+        if voice not in valid_voices:
+            return Response(
+                {"message": f"Invalid voice. Must be one of: {', '.join(valid_voices)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        def audio_stream():
+            """Generator for audio binary stream."""
+            try:
+                stream = TextToSpeechService.generate_speech(
+                    text=message.content,
+                    voice=voice,
+                    model='tts-1',
+                    response_format='mp3',
+                    speed=speed
+                )
+
+                for chunk in stream:
+                    yield chunk
+
+            except Exception as e:
+                logger.error(f"Audio streaming error: {e}")
+                # Can't send error in binary stream, log only
+
+        response = StreamingHttpResponse(
+            audio_stream(),
+            content_type='audio/mpeg'
         )
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'

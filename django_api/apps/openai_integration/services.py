@@ -522,3 +522,73 @@ class ChatCompletionService:
             logger.error(f"Chat completion streaming error: {e}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             raise
+
+
+# ============================================================================
+# Text-to-Speech Service
+# ============================================================================
+
+class TextToSpeechService:
+    """Service for OpenAI Text-to-Speech API."""
+
+    @staticmethod
+    def generate_speech(
+        text: str,
+        voice: str = 'nova',
+        model: str = 'tts-1',
+        response_format: str = 'mp3',
+        speed: float = 1.0
+    ) -> Generator[bytes, None, None]:
+        """
+        Generate speech audio from text using OpenAI TTS API.
+
+        Yields binary audio chunks suitable for streaming.
+
+        Args:
+            text: Text to convert to speech
+            voice: Voice ID (alloy, echo, fable, onyx, nova, shimmer)
+            model: TTS model (tts-1 or tts-1-hd)
+            response_format: Audio format (mp3, opus, aac, flac, wav, pcm)
+            speed: Playback speed (0.25 to 4.0)
+
+        Yields:
+            Binary audio chunks
+        """
+        api_key = get_openai_key()
+        if not api_key:
+            raise RuntimeError("OpenAI API key not configured")
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": model,
+            "input": text,
+            "voice": voice,
+            "response_format": response_format,
+            "speed": speed,
+        }
+
+        try:
+            response = requests.post(
+                f"{OPENAI_API}/audio/speech",
+                headers=headers,
+                json=payload,
+                stream=True,
+                timeout=120,
+            )
+            response.raise_for_status()
+
+            # Stream binary audio chunks
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+
+        except requests.HTTPError as e:
+            logger.error(f"OpenAI TTS API error: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"TTS generation error: {e}")
+            raise

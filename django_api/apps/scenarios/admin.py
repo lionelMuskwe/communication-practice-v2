@@ -11,15 +11,15 @@ class TagInline(admin.TabularInline):
 @admin.register(AssistantScenario)
 class AssistantScenarioAdmin(admin.ModelAdmin):
     """Admin interface for AssistantScenario model."""
-    list_display = ['id', 'role', 'enable', 'openid', 'created_at', 'updated_at']
-    list_filter = ['enable', 'role', 'created_at']
+    list_display = ['id', 'role', 'voice', 'enable', 'openid', 'created_at', 'updated_at']
+    list_filter = ['enable', 'role', 'voice', 'created_at']
     search_fields = ['scenario_text', 'role', 'openid']
     readonly_fields = ['openid', 'created_at', 'updated_at']
     ordering = ['-created_at']
 
     fieldsets = (
         ('Basic Information', {
-            'fields': ('scenario_text', 'role', 'enable')
+            'fields': ('scenario_text', 'role', 'voice', 'enable')
         }),
         ('Instructions', {
             'fields': ('additional_instructions', 'communication_preferences')
