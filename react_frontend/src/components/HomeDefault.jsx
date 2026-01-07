@@ -1,41 +1,90 @@
-import React from 'react';
-import { Box, Card, CardContent, Typography, Container, Grid, Fade, Chip, Avatar } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Container,
+  Grid,
+  Fade,
+  Chip,
+  Avatar,
+  CircularProgress,
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import SettingsIcon from '@mui/icons-material/Settings';
 import ChatIcon from '@mui/icons-material/Chat';
-import AssignmentIcon from '@mui/icons-material/Assignment';
 import GradingIcon from '@mui/icons-material/Grading';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import PeopleIcon from '@mui/icons-material/People';
 import HistoryIcon from '@mui/icons-material/History';
+import MessageIcon from '@mui/icons-material/Message';
 import { useSelector } from 'react-redux';
+import { getConversations } from '../services/apiService';
 
 const HomeDefault = () => {
   const navigate = useNavigate();
   const role = useSelector((state) => state.auth.role);
   const userName = useSelector((state) => state.auth.user);
-
   const isAdmin = role === 'admin';
 
-  const handleManageClick = () => {
-    if (isAdmin) {
-      navigate('/home/manage');
-    }
-  };
+  // Dashboard stats state
+  const [stats, setStats] = useState({
+    sessionsCompleted: 0,
+    averageScore: 0,
+    totalMessages: 0,
+    loading: true,
+    error: false,
+  });
 
-  const handleActivities = () => {
-    if (isAdmin) {
-      navigate('/home/manage_activities');
-    }
-  };
+  // Fetch dashboard stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Fetch all conversations
+        const response = await getConversations();
+        const conversations = response.data || [];
 
-  const handleRubrics = () => {
-    if (isAdmin) {
-      navigate('/home/rubrics');
-    }
-  };
+        // Calculate stats
+        const sessionsCompleted = conversations.length;
 
-  const dashboardCards = [
+        // Count total messages across all conversations
+        const totalMessages = conversations.reduce((sum, conv) => {
+          return sum + (conv.messages?.length || 0);
+        }, 0);
+
+        // Calculate average score from assessments
+        const conversationsWithScores = conversations.filter(
+          (conv) => conv.assessment?.overall?.total_score != null
+        );
+
+        const averageScore = conversationsWithScores.length > 0
+          ? conversationsWithScores.reduce(
+              (sum, conv) => sum + conv.assessment.overall.total_score,
+              0
+            ) / conversationsWithScores.length
+          : 0;
+
+        setStats({
+          sessionsCompleted,
+          averageScore: averageScore.toFixed(1),
+          totalMessages,
+          loading: false,
+          error: false,
+        });
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        setStats((prev) => ({
+          ...prev,
+          loading: false,
+          error: true,
+        }));
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  // Quick Actions - Only Start Practice and Conversation History
+  const quickActions = [
     {
       title: 'Start Practice',
       description: 'Begin your communication skills training with AI patients',
@@ -43,7 +92,6 @@ const HomeDefault = () => {
       color: '#0052CC',
       bgGradient: 'linear-gradient(135deg, #0052CC 20%, #0747A6 100%)',
       onClick: () => navigate('/home/talk'),
-      enabled: true,
       featured: true,
     },
     {
@@ -53,38 +101,7 @@ const HomeDefault = () => {
       color: '#36B37E',
       bgGradient: 'linear-gradient(135deg, #36B37E 20%, #00875A 100%)',
       onClick: () => navigate('/home/conversations'),
-      enabled: true,
       featured: false,
-    },
-    {
-      title: 'Manage Characters',
-      description: 'Configure patient personas and scenarios',
-      icon: PeopleIcon,
-      color: '#00B8D9',
-      bgGradient: 'linear-gradient(135deg, #00B8D9 20%, #0052CC 100%)',
-      onClick: handleManageClick,
-      enabled: isAdmin,
-      adminOnly: true,
-    },
-    {
-      title: 'Manage Activities',
-      description: 'Create and organize practice activities',
-      icon: AssignmentIcon,
-      color: '#6554C0',
-      bgGradient: 'linear-gradient(135deg, #6554C0 20%, #5243AA 100%)',
-      onClick: handleActivities,
-      enabled: isAdmin,
-      adminOnly: true,
-    },
-    {
-      title: 'Manage Rubrics',
-      description: 'Define assessment criteria and scoring',
-      icon: GradingIcon,
-      color: '#FF5630',
-      bgGradient: 'linear-gradient(135deg, #FF5630 20%, #DE350B 100%)',
-      onClick: handleRubrics,
-      enabled: isAdmin,
-      adminOnly: true,
     },
   ];
 
@@ -94,9 +111,10 @@ const HomeDefault = () => {
         minHeight: 'calc(100vh - 64px)',
         background: 'linear-gradient(180deg, #F4F5F7 0%, #FFFFFF 100%)',
         py: { xs: 3, sm: 4, md: 6 },
+        px: { xs: 2, sm: 3 },
       }}
     >
-      <Container maxWidth="lg">
+      <Container maxWidth="lg" sx={{ px: { xs: 0, sm: 2 } }}>
         {/* Welcome Section */}
         <Fade in timeout={800}>
           <Box sx={{ mb: { xs: 4, md: 6 } }}>
@@ -147,7 +165,7 @@ const HomeDefault = () => {
               />
             </Box>
 
-            {/* Quick Stats */}
+            {/* Quick Stats - Live Data */}
             <Grid container spacing={{ xs: 2, md: 2 }} sx={{ mt: { xs: 2, md: 3 } }}>
               <Grid item xs={12} sm={4}>
                 <Card
@@ -161,16 +179,20 @@ const HomeDefault = () => {
                   <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Box>
-                        <Typography
-                          variant="h4"
-                          sx={{
-                            fontWeight: 700,
-                            mb: 0.5,
-                            fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
-                          }}
-                        >
-                          12
-                        </Typography>
+                        {stats.loading ? (
+                          <CircularProgress size={32} sx={{ color: 'white', mb: 0.5 }} />
+                        ) : (
+                          <Typography
+                            variant="h4"
+                            sx={{
+                              fontWeight: 700,
+                              mb: 0.5,
+                              fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
+                            }}
+                          >
+                            {stats.error ? '--' : stats.sessionsCompleted}
+                          </Typography>
+                        )}
                         <Typography
                           variant="body2"
                           sx={{
@@ -198,16 +220,20 @@ const HomeDefault = () => {
                   <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Box>
-                        <Typography
-                          variant="h4"
-                          sx={{
-                            fontWeight: 700,
-                            mb: 0.5,
-                            fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
-                          }}
-                        >
-                          8.5
-                        </Typography>
+                        {stats.loading ? (
+                          <CircularProgress size={32} sx={{ color: 'white', mb: 0.5 }} />
+                        ) : (
+                          <Typography
+                            variant="h4"
+                            sx={{
+                              fontWeight: 700,
+                              mb: 0.5,
+                              fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
+                            }}
+                          >
+                            {stats.error ? '--' : stats.averageScore}
+                          </Typography>
+                        )}
                         <Typography
                           variant="body2"
                           sx={{
@@ -235,16 +261,20 @@ const HomeDefault = () => {
                   <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Box>
-                        <Typography
-                          variant="h4"
-                          sx={{
-                            fontWeight: 700,
-                            mb: 0.5,
-                            fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
-                          }}
-                        >
-                          24
-                        </Typography>
+                        {stats.loading ? (
+                          <CircularProgress size={32} sx={{ color: 'white', mb: 0.5 }} />
+                        ) : (
+                          <Typography
+                            variant="h4"
+                            sx={{
+                              fontWeight: 700,
+                              mb: 0.5,
+                              fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
+                            }}
+                          >
+                            {stats.error ? '--' : stats.totalMessages}
+                          </Typography>
+                        )}
                         <Typography
                           variant="body2"
                           sx={{
@@ -252,10 +282,10 @@ const HomeDefault = () => {
                             fontSize: { xs: '0.75rem', sm: '0.875rem' }
                           }}
                         >
-                          Hours Practiced
+                          Total Messages
                         </Typography>
                       </Box>
-                      <AssignmentIcon sx={{ fontSize: { xs: 32, sm: 36, md: 40 }, opacity: 0.8 }} />
+                      <MessageIcon sx={{ fontSize: { xs: 32, sm: 36, md: 40 }, opacity: 0.8 }} />
                     </Box>
                   </CardContent>
                 </Card>
@@ -264,7 +294,7 @@ const HomeDefault = () => {
           </Box>
         </Fade>
 
-        {/* Action Cards */}
+        {/* Quick Actions - Only Start Practice and Conversation History */}
         <Box sx={{ mb: { xs: 2, md: 3 } }}>
           <Typography
             variant="h5"
@@ -278,32 +308,27 @@ const HomeDefault = () => {
             Quick Actions
           </Typography>
           <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
-            {dashboardCards.map((card, index) => (
-              <Grid item xs={12} sm={6} md={3} key={card.title}>
+            {quickActions.map((card, index) => (
+              <Grid item xs={12} sm={6} key={card.title}>
                 <Fade in timeout={1000 + index * 200}>
                   <Card
-                    onClick={card.enabled ? card.onClick : undefined}
+                    onClick={card.onClick}
                     sx={{
                       height: '100%',
                       borderRadius: { xs: 3, md: 4 },
-                      cursor: card.enabled ? 'pointer' : 'not-allowed',
-                      opacity: card.enabled ? 1 : 0.5,
+                      cursor: 'pointer',
                       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                       border: '2px solid transparent',
                       position: 'relative',
                       overflow: 'visible',
-                      '&:hover': card.enabled
-                        ? {
-                            transform: { xs: 'none', md: 'translateY(-8px)' },
-                            boxShadow: `0 12px 24px rgba(0, 82, 204, 0.2)`,
-                            borderColor: card.color,
-                          }
-                        : {},
-                      '&:active': card.enabled
-                        ? {
-                            transform: { xs: 'scale(0.98)', md: 'translateY(-8px) scale(0.98)' },
-                          }
-                        : {},
+                      '&:hover': {
+                        transform: { xs: 'none', md: 'translateY(-8px)' },
+                        boxShadow: `0 12px 24px rgba(0, 82, 204, 0.2)`,
+                        borderColor: card.color,
+                      },
+                      '&:active': {
+                        transform: { xs: 'scale(0.98)', md: 'translateY(-8px) scale(0.98)' },
+                      },
                     }}
                   >
                     {card.featured && (
@@ -354,20 +379,6 @@ const HomeDefault = () => {
                       >
                         {card.description}
                       </Typography>
-                      {card.adminOnly && !isAdmin && (
-                        <Chip
-                          label="Admin Only"
-                          size="small"
-                          sx={{
-                            mt: 2,
-                            bgcolor: '#FFEBE6',
-                            color: '#DE350B',
-                            fontWeight: 600,
-                            fontSize: { xs: '0.625rem', md: '0.7rem' },
-                            height: { xs: 20, md: 24 },
-                          }}
-                        />
-                      )}
                     </CardContent>
                   </Card>
                 </Fade>
