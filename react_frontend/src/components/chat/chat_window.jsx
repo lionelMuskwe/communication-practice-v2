@@ -439,27 +439,64 @@ const ChatWindow = ({
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         fullWidth
-        maxWidth="lg"
+        maxWidth="xl"
         PaperProps={{
           sx: {
             height: { xs: '100vh', sm: '95vh' },
             maxHeight: { xs: '100vh', sm: '95vh' },
+            maxWidth: { xs: '100%', sm: '95vw' },
             m: { xs: 0, sm: 2 },
-            borderRadius: { xs: 0, sm: 2 },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
           },
         }}
       >
-        <DialogTitle sx={{ p: { xs: 2, md: 3 } }}>Assessment Results</DialogTitle>
-        <DialogContent sx={{ p: { xs: 1, md: 2 }, overflow: 'auto' }}>
+        <DialogTitle sx={{ p: 3, pb: 2, borderBottom: '1px solid #e0e0e0' }}>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            Assessment Results
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            Detailed evaluation and conversation analysis
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ p: { xs: 2, md: 3 }, overflow: 'auto' }}>
           <ChatResultsDialog
             assessment={resultsRubrics}
             evaluations={resultsRubrics?.evaluations || []}
             messages={messages}
           />
         </DialogContent>
-        <DialogActions sx={{ p: { xs: 1.5, md: 2 }, borderTop: '1px solid #ddd' }}>
-          <Button onClick={() => setDialogOpen(false)} variant="outlined">Close</Button>
-          <Button onClick={() => window.print()} variant="contained">Print</Button>
+        <DialogActions sx={{ p: 3, pt: 2, borderTop: '1px solid #e0e0e0', gap: 1 }}>
+          <Button
+            onClick={() => setDialogOpen(false)}
+            color="inherit"
+            sx={{
+              px: 3,
+              py: 1.5,
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 500,
+            }}
+          >
+            Close
+          </Button>
+          <Button
+            onClick={() => window.print()}
+            variant="contained"
+            sx={{
+              px: 3,
+              py: 1.5,
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 600,
+              boxShadow: '0 2px 4px rgba(25, 118, 210, 0.25)',
+              '&:hover': {
+                boxShadow: '0 4px 8px rgba(25, 118, 210, 0.35)',
+              },
+            }}
+          >
+            Print
+          </Button>
         </DialogActions>
       </Dialog>
 
