@@ -14,7 +14,9 @@ import {
   getConversation,
   streamMessage,
   rubricAssessmentByConversation,
+  API_BASE_URL,
 } from '../../services/apiService';
+import store from '../../store';
 
 import {
   getCurrentConversationId,
@@ -40,10 +42,12 @@ const ChatWindow = ({
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState('');
   const [isAssessing, setIsAssessing] = useState(false);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
 
   const recognitionRef = useRef(null);
   const endOfMessagesRef = useRef(null);
   const streamingContentRef = useRef('');
+  const audioRef = useRef(null);
 
   useEffect(() => {
     const initializeConversation = async () => {
@@ -87,17 +91,58 @@ const ChatWindow = ({
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage]);
 
-  const speakLatestAssistant = useCallback((content) => {
-    if (!content) return;
-    try {
-      const utter = new window.SpeechSynthesisUtterance(content);
-      utter.lang = 'en-GB';
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utter);
-    } catch (e) {
-      console.warn('SpeechSynthesis failed:', e);
+  const playMessageAudio = useCallback(async (messageId) => {
+    console.log('[TTS] playMessageAudio called with:', { messageId, conversationId });
+
+    if (!messageId || !conversationId) {
+      console.warn('[TTS] Missing messageId or conversationId');
+      return;
     }
-  }, []);
+
+    try {
+      setIsAudioLoading(true);
+
+      const state = store.getState();
+      const token = state?.auth?.token;
+
+      const url = `${API_BASE_URL}/conversations/${conversationId}/audio/${messageId}/`;
+      console.log('[TTS] Fetching audio from:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      });
+
+      console.log('[TTS] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[TTS] Audio fetch failed:', { status: response.status, error: errorText });
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const audioBlob = await response.blob();
+      console.log('[TTS] Audio blob size:', audioBlob.size);
+
+      const audioUrl = URL.createObjectURL(audioBlob);
+      console.log('[TTS] Audio URL created:', audioUrl);
+
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        console.log('[TTS] Playing audio...');
+        await audioRef.current.play();
+        console.log('[TTS] Audio playing!');
+      }
+
+    } catch (error) {
+      console.error('[TTS] Audio playback error:', error);
+      // Silent failure - text is still available
+    } finally {
+      setIsAudioLoading(false);
+    }
+  }, [conversationId]);
 
   const handleMicClick = () => {
     setMicError('');
@@ -160,7 +205,6 @@ const ChatWindow = ({
           content: finalContent,
           created_at: new Date().toISOString(),
         }]);
-        speakLatestAssistant(finalContent);
         setStreamingMessage('');
         streamingContentRef.current = '';
         setIsStreaming(false);
@@ -171,6 +215,11 @@ const ChatWindow = ({
         setStreamingMessage('');
         streamingContentRef.current = '';
         alert(`Error: ${error.message}`);
+      },
+      (messageId) => {
+        // Audio ready handler - play OpenAI TTS audio
+        console.log('[TTS] Message ID received:', messageId);
+        playMessageAudio(messageId);
       }
     );
   };
@@ -413,6 +462,13 @@ const ChatWindow = ({
           <Button onClick={() => window.print()} variant="contained">Print</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Hidden audio player for OpenAI TTS */}
+      <audio
+        ref={audioRef}
+        style={{ display: 'none' }}
+        onError={(e) => console.error('Audio playback error:', e)}
+      />
     </Box>
   );
 };

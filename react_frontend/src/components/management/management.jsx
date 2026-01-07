@@ -36,6 +36,7 @@ const initialState = {
   openid: '',
   scenario_text: '',
   role: '',
+  voice: 'nova',
   additional_instructions: '',
   enable: true,
   communication_preferences: '',
@@ -53,6 +54,15 @@ const roles = [
   'Elderly Woman',
 ]; // Add more roles as needed
 
+const voices = [
+  { value: 'alloy', label: 'Alloy' },
+  { value: 'echo', label: 'Echo' },
+  { value: 'fable', label: 'Fable' },
+  { value: 'onyx', label: 'Onyx' },
+  { value: 'nova', label: 'Nova' },
+  { value: 'shimmer', label: 'Shimmer' },
+];
+
 const reducer = (state, action) => {
   switch (action.type) {
     case 'Set_All':
@@ -63,6 +73,8 @@ const reducer = (state, action) => {
       return { ...state, scenario_text: action.payload };
     case 'SET_ROLE':
       return { ...state, role: action.payload };
+    case 'SET_VOICE':
+      return { ...state, voice: action.payload };
     case 'SET_DESCRIPTION':
       return { ...state, additional_instructions: action.payload };
     case 'SET_Communication_Preferences':
@@ -221,6 +233,7 @@ const Management = () => {
       id: state.id,
       scenario_text: state.scenario_text,
       role: state.role,
+      voice: state.voice,
       additional_instructions: state.additional_instructions,
       communication_preferences: state.communication_preferences,
       enable: state.enable,
@@ -286,7 +299,7 @@ const Management = () => {
 
             <form className="management-form">
             <TabPanel value={tabIndex} index={0}>
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                   <FormControl fullWidth variant="outlined">
                     <InputLabel>Avatar</InputLabel>
                     <Select
@@ -319,6 +332,21 @@ const Management = () => {
                     onChange={(e) => dispatch({ type: 'SET_NAME', payload: e.target.value })}
                   />
                 </Box>
+
+                <FormControl fullWidth variant="outlined">
+                  <InputLabel>Voice</InputLabel>
+                  <Select
+                    value={state.voice || 'nova'}
+                    onChange={(e) => dispatch({ type: 'SET_VOICE', payload: e.target.value })}
+                    label="Voice"
+                  >
+                    {voices.map((voice) => (
+                      <MenuItem key={voice.value} value={voice.value}>
+                        {voice.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </TabPanel>
 
               <TabPanel value={tabIndex} index={1}>

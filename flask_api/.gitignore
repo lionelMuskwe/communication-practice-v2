@@ -1,5 +1,0 @@
-.env
-.env.prod
-__pycache__/
-/secrets/
-*.pem

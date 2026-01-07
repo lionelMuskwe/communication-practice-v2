@@ -328,6 +328,7 @@ export const updateConversation = (conversationId, data) =>
  * @param {Function} onChunk - Callback for each token: (token) => void
  * @param {Function} onComplete - Callback when done: () => void
  * @param {Function} onError - Callback on error: (error) => void
+ * @param {Function} onAudioReady - Callback when audio is ready: (messageId) => void
  * @returns {EventSource} The EventSource object (can be closed manually)
  */
 export const streamMessage = (
@@ -335,7 +336,8 @@ export const streamMessage = (
   content,
   onChunk,
   onComplete,
-  onError
+  onError,
+  onAudioReady
 ) => {
   const state = store.getState();
   const token = state?.auth?.token;
@@ -381,6 +383,14 @@ export const streamMessage = (
                   if (data.error) {
                     onError(new Error(data.error));
                     return;
+                  }
+
+                  if (data.message_id) {
+                    // Message saved, trigger audio playback
+                    if (onAudioReady) {
+                      onAudioReady(data.message_id);
+                    }
+                    continue;
                   }
 
                   if (data.done) {
