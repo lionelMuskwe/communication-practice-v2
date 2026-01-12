@@ -19,6 +19,8 @@ import {
   Chip,
   Menu,
   MenuItem,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -29,10 +31,14 @@ import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PersonIcon from '@mui/icons-material/Person';
 import CheckIcon from '@mui/icons-material/Check';
-import { getConversation, updateConversation, deleteConversation } from '../services/apiService';
+import ChatIcon from '@mui/icons-material/Chat';
+import GradingIcon from '@mui/icons-material/Grading';
+import FeedbackIcon from '@mui/icons-material/Feedback';
+import { getConversation, updateConversation, deleteConversation, getConversationAssessments } from '../services/apiService';
 import { useDispatch } from 'react-redux';
 import { showSnackbar } from '../features/snackbarSlice';
 import jsPDF from 'jspdf';
+import AssessmentDisplay from './AssessmentDisplay';
 
 const ConversationModal = ({ open, onClose, conversationId, onConversationDeleted }) => {
   const dispatch = useDispatch();
@@ -42,11 +48,15 @@ const ConversationModal = ({ open, onClose, conversationId, onConversationDelete
   const [editedTitle, setEditedTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
+  const [tabIndex, setTabIndex] = useState(0);
+  const [assessment, setAssessment] = useState(null);
+  const [loadingAssessment, setLoadingAssessment] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     if (open && conversationId) {
       fetchConversation();
+      fetchAssessment();
     }
   }, [open, conversationId]);
 
@@ -67,6 +77,24 @@ const ConversationModal = ({ open, onClose, conversationId, onConversationDelete
       dispatch(showSnackbar({ message: 'Failed to load conversation', severity: 'error' }));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAssessment = async () => {
+    try {
+      setLoadingAssessment(true);
+      const res = await getConversationAssessments(conversationId);
+      if (res.status === 200 && res.data) {
+        setAssessment(res.data.results);
+      }
+    } catch (error) {
+      // No assessment found is expected - don't show error
+      if (error.response?.status !== 404) {
+        console.error('Failed to fetch assessment:', error);
+      }
+      setAssessment(null);
+    } finally {
+      setLoadingAssessment(false);
     }
   };
 
@@ -355,8 +383,43 @@ const ConversationModal = ({ open, onClose, conversationId, onConversationDelete
         </MenuItem>
       </Menu>
 
-      {/* Search Bar */}
-      {conversation?.messages?.length > 0 && (
+      {/* Tabs */}
+      <Tabs
+        value={tabIndex}
+        onChange={(e, newValue) => setTabIndex(newValue)}
+        indicatorColor="primary"
+        textColor="primary"
+        variant="fullWidth"
+        sx={{
+          borderBottom: '2px solid #e0e0e0',
+          mb: 0,
+        }}
+      >
+        <Tab
+          icon={<ChatIcon />}
+          iconPosition="start"
+          label="Conversation"
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            fontSize: '0.9375rem',
+          }}
+        />
+        <Tab
+          icon={<GradingIcon />}
+          iconPosition="start"
+          label="Assessment"
+          disabled={!assessment}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            fontSize: '0.9375rem',
+          }}
+        />
+      </Tabs>
+
+      {/* Search Bar - only show on Conversation tab */}
+      {tabIndex === 0 && conversation?.messages?.length > 0 && (
         <Box sx={{ p: 2, borderBottom: '1px solid #eee' }}>
           <TextField
             fullWidth
@@ -383,80 +446,111 @@ const ConversationModal = ({ open, onClose, conversationId, onConversationDelete
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          bgcolor: '#f5f5f5',
+          bgcolor: tabIndex === 1 ? '#fff' : '#f5f5f5',
         }}
       >
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-            <CircularProgress />
-          </Box>
-        ) : conversation ? (
-          <List sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-            {filteredMessages.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
+        {/* Tab 1: Conversation */}
+        {tabIndex === 0 && (
+          <>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+                <CircularProgress />
+              </Box>
+            ) : conversation ? (
+              <List sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+                {filteredMessages.length === 0 ? (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {searchQuery ? 'No messages found matching your search' : 'No messages yet'}
+                    </Typography>
+                  </Box>
+                ) : (
+                  filteredMessages.map((msg, idx) => {
+                    const isUser = msg.role === 'user';
+                    const time = formatDate(msg.created_at);
+
+                    return (
+                      <ListItem key={idx} sx={{ px: 0, py: 0.5 }}>
+                        <Box sx={{ width: '100%', display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+                          <Paper
+                            elevation={1}
+                            sx={{
+                              maxWidth: { xs: '90%', sm: '75%' },
+                              bgcolor: isUser ? '#1976d2' : '#fff',
+                              color: isUser ? '#fff' : '#000',
+                              px: 2,
+                              py: 1,
+                              borderRadius: 2,
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontSize: { xs: '0.875rem', md: '0.9375rem' },
+                                wordBreak: 'break-word',
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              {searchQuery ? highlightText(msg.content, searchQuery) : msg.content}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontSize: '0.7rem',
+                                color: isUser ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+                                mt: 0.5,
+                                display: 'block',
+                              }}
+                            >
+                              {time}
+                            </Typography>
+                          </Paper>
+                        </Box>
+                      </ListItem>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </List>
+            ) : (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
                 <Typography variant="body2" color="text.secondary">
-                  {searchQuery ? 'No messages found matching your search' : 'No messages yet'}
+                  No conversation data available
                 </Typography>
               </Box>
-            ) : (
-              filteredMessages.map((msg, idx) => {
-                const isUser = msg.role === 'user';
-                const time = formatDate(msg.created_at);
-
-                return (
-                  <ListItem key={idx} sx={{ px: 0, py: 0.5 }}>
-                    <Box sx={{ width: '100%', display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
-                      <Paper
-                        elevation={1}
-                        sx={{
-                          maxWidth: { xs: '90%', sm: '75%' },
-                          bgcolor: isUser ? '#1976d2' : '#fff',
-                          color: isUser ? '#fff' : '#000',
-                          px: 2,
-                          py: 1,
-                          borderRadius: 2,
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontSize: { xs: '0.875rem', md: '0.9375rem' },
-                            wordBreak: 'break-word',
-                            whiteSpace: 'pre-wrap',
-                          }}
-                        >
-                          {searchQuery ? highlightText(msg.content, searchQuery) : msg.content}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            fontSize: '0.7rem',
-                            color: isUser ? 'rgba(255,255,255,0.7)' : 'text.secondary',
-                            mt: 0.5,
-                            display: 'block',
-                          }}
-                        >
-                          {time}
-                        </Typography>
-                      </Paper>
-                    </Box>
-                  </ListItem>
-                );
-              })
             )}
-            <div ref={messagesEndRef} />
-          </List>
-        ) : (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              No conversation data available
-            </Typography>
+          </>
+        )}
+
+        {/* Tab 2: Assessment */}
+        {tabIndex === 1 && (
+          <Box sx={{ flex: 1, overflowY: 'auto', p: 3 }}>
+            {loadingAssessment ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <AssessmentDisplay assessment={assessment} />
+            )}
           </Box>
         )}
       </DialogContent>
 
       {/* Footer */}
-      <DialogActions sx={{ p: 2, borderTop: '1px solid #ddd' }}>
+      <DialogActions sx={{ p: 2, borderTop: '1px solid #ddd', gap: 1 }}>
+        <Button
+          startIcon={<FeedbackIcon />}
+          onClick={() => {
+            window.open(
+              `/home/feedback/new?conversation_id=${conversationId}`,
+              '_blank'
+            );
+          }}
+          variant="outlined"
+          sx={{ mr: 'auto' }}
+        >
+          Give Feedback
+        </Button>
         <Button onClick={onClose} variant="outlined">
           Close
         </Button>

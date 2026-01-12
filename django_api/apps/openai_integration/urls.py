@@ -10,7 +10,9 @@ from .views import (
     MessageAudioStreamView,
     rubric_assessment,
     rubric_responses,
+    get_conversation_assessments,
 )
+from .stats_views import dashboard_stats
 
 # Router for ConversationViewSet
 router = DefaultRouter()
@@ -34,6 +36,13 @@ urlpatterns = [
         name='message-audio'
     ),
 
+    # Assessment retrieval
+    path(
+        'conversations/<uuid:conversation_id>/assessments/',
+        get_conversation_assessments,
+        name='conversation-assessments'
+    ),
+
     # Rubric assessment
     path(
         'activities/<int:activity_id>/rubric_assessment/',
@@ -44,5 +53,12 @@ urlpatterns = [
         'scenarios/<int:scenario_id>/rubric_responses/',
         rubric_responses,
         name='rubric-responses'
+    ),
+
+    # Dashboard statistics
+    path(
+        'stats/dashboard/',
+        dashboard_stats,
+        name='dashboard-stats'
     ),
 ]

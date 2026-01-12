@@ -18,7 +18,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import HistoryIcon from '@mui/icons-material/History';
 import MessageIcon from '@mui/icons-material/Message';
 import { useSelector } from 'react-redux';
-import { getConversations } from '../services/apiService';
+import { getDashboardStats } from '../services/apiService';
 
 const HomeDefault = () => {
   const navigate = useNavigate();
@@ -39,37 +39,20 @@ const HomeDefault = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // Fetch all conversations
-        const response = await getConversations();
-        const conversations = response.data || [];
+        // Fetch aggregated stats from backend
+        const response = await getDashboardStats();
 
-        // Calculate stats
-        const sessionsCompleted = conversations.length;
+        if (response.status === 200) {
+          const { sessions_completed, total_messages, average_score } = response.data;
 
-        // Count total messages across all conversations
-        const totalMessages = conversations.reduce((sum, conv) => {
-          return sum + (conv.messages?.length || 0);
-        }, 0);
-
-        // Calculate average score from assessments
-        const conversationsWithScores = conversations.filter(
-          (conv) => conv.assessment?.overall?.total_score != null
-        );
-
-        const averageScore = conversationsWithScores.length > 0
-          ? conversationsWithScores.reduce(
-              (sum, conv) => sum + conv.assessment.overall.total_score,
-              0
-            ) / conversationsWithScores.length
-          : 0;
-
-        setStats({
-          sessionsCompleted,
-          averageScore: averageScore.toFixed(1),
-          totalMessages,
-          loading: false,
-          error: false,
-        });
+          setStats({
+            sessionsCompleted: sessions_completed,
+            averageScore: average_score !== null ? Number(average_score).toFixed(1) : 'N/A',
+            totalMessages: total_messages,
+            loading: false,
+            error: false,
+          });
+        }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
         setStats((prev) => ({

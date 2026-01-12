@@ -443,6 +443,15 @@ export const rubricAssessmentByConversation = ({
     timeoutMs
   );
 
+/**
+ * Get assessments for a conversation.
+ * @param {string} conversationId - Conversation UUID
+ * @param {boolean} all - Return all assessments (default: false, returns latest only)
+ * @returns {Promise} Response with assessment(s)
+ */
+export const getConversationAssessments = (conversationId, all = false) =>
+  get(`/conversations/${encodeURIComponent(conversationId)}/assessments/`, { all });
+
 // ─────────────────────────────────────────────────────────────
 // Feedback API endpoints
 // ─────────────────────────────────────────────────────────────
@@ -506,6 +515,16 @@ export const adminUpdateFeedback = (feedbackId, { status, admin_notes }) =>
  */
 export const getConversationDetail = (conversationId) =>
   get(`/conversations/${encodeURIComponent(conversationId)}/`);
+
+// ─────────────────────────────────────────────────────────────
+// Dashboard Statistics
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Get dashboard statistics for the authenticated user.
+ * @returns {Promise} Response with stats (sessions_completed, total_messages, average_score)
+ */
+export const getDashboardStats = () => get('/stats/dashboard/');
 
 // Expose the client and base URL (rare cases)
 export { apiClient, API_BASE_URL };

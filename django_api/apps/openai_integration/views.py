@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 
 from apps.scenarios.models import AssistantScenario
 from apps.activities.models import Activity
-from .models import Conversation, Message
+from .models import Conversation, Message, Assessment
 from .services import ChatCompletionService, TextToSpeechService, build_full_context, get_openai_model
 from .evaluators import CategoryRubricEvaluator, SimpleRubricEvaluator
 from .serializers import (
@@ -29,6 +29,7 @@ from .serializers import (
     MessageStreamSerializer,
     RubricAssessmentRequestSerializer,
     SimpleRubricRequestSerializer,
+    AssessmentSerializer,
 )
 
 
@@ -643,7 +644,23 @@ def rubric_assessment(request, activity_id):
             messages=messages,
             scenario=scenario
         )
-        return Response(result, status=status.HTTP_200_OK)
+
+        # Save assessment to database
+        assessment = Assessment.objects.create(
+            conversation=conversation,
+            results=result,
+            total_score=result.get('overall', {}).get('total_score'),
+            passed=result.get('overall', {}).get('passed', False),
+            assessed_by=request.user
+        )
+
+        logger.info(f"Saved assessment {assessment.id} for conversation {conversation_id}")
+
+        # Return assessment with saved ID
+        return Response({
+            'assessment_id': str(assessment.id),
+            **result
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
         logger.error(f"Rubric assessment failed: {e}")
@@ -651,6 +668,44 @@ def rubric_assessment(request, activity_id):
             {"message": "Internal server error"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_conversation_assessments(request, conversation_id):
+    """
+    Get all assessments for a conversation.
+    Returns latest assessment by default, or all with ?all=true
+
+    GET /api/conversations/<conversation_id>/assessments/
+    Query params: ?all=true (optional, to get all assessments)
+    """
+    try:
+        conversation = Conversation.objects.get(
+            id=conversation_id,
+            user=request.user
+        )
+    except Conversation.DoesNotExist:
+        return Response(
+            {'error': 'Conversation not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    show_all = request.query_params.get('all', 'false').lower() == 'true'
+
+    if show_all:
+        assessments = conversation.assessments.all()
+        serializer = AssessmentSerializer(assessments, many=True)
+    else:
+        latest = conversation.assessments.first()
+        if not latest:
+            return Response(
+                {'message': 'No assessments found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = AssessmentSerializer(latest)
+
+    return Response(serializer.data)
 
 
 @api_view(['POST'])

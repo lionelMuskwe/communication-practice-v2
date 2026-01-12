@@ -15,13 +15,14 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ChatIcon from '@mui/icons-material/Chat';
-import FeedbackIcon from '@mui/icons-material/Feedback';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import { useNavigate } from 'react-router-dom';
 import { getConversations } from '../services/apiService';
 import { setCurrentConversationId } from '../utils/storage';
 import { useDispatch } from 'react-redux';
 import { showSnackbar } from '../features/snackbarSlice';
 import ConversationModal from '../components/ConversationModal';
+import { generateGradient } from '../utils/gradientGenerator';
 
 const ConversationsPage = () => {
   const navigate = useNavigate();
@@ -163,6 +164,8 @@ const ConversationsPage = () => {
               <Card
                 sx={{
                   height: '100%',
+                  position: 'relative',
+                  overflow: 'hidden',
                   '&:hover': {
                     boxShadow: 6,
                     transform: 'translateY(-4px)',
@@ -170,11 +173,38 @@ const ConversationsPage = () => {
                   },
                 }}
               >
+                {/* Gradient Background Overlay */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: '120px',
+                    background: generateGradient(conversation.id),
+                    opacity: 0.15,
+                    zIndex: 0,
+                  }}
+                />
+
                 <CardActionArea
                   onClick={() => handleConversationClick(conversation.id)}
-                  sx={{ height: '100%' }}
+                  sx={{ height: '100%', position: 'relative', zIndex: 1 }}
                 >
                   <CardContent>
+                    {/* Assessment Badge */}
+                    {conversation.latest_assessment && (
+                      <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 0.5 }}>
+                        <Chip
+                          icon={<AssessmentIcon />}
+                          label={conversation.latest_assessment.total_score}
+                          size="small"
+                          color={conversation.latest_assessment.passed ? 'success' : 'error'}
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Box>
+                    )}
+
                     <Typography variant="h6" gutterBottom noWrap>
                       {conversation.title}
                     </Typography>
@@ -207,24 +237,6 @@ const ConversationsPage = () => {
                     <Typography variant="caption" color="text.secondary">
                       Last updated: {formatDate(conversation.updated_at)}
                     </Typography>
-
-                    <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<FeedbackIcon />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          window.open(
-                            `/home/feedback/new?conversation_id=${conversation.id}`,
-                            '_blank'
-                          );
-                        }}
-                        fullWidth
-                      >
-                        Give Feedback
-                      </Button>
-                    </Box>
                   </CardContent>
                 </CardActionArea>
               </Card>

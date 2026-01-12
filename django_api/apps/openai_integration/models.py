@@ -131,3 +131,55 @@ class Message(models.Model):
 
     def __str__(self):
         return f"{self.role}: {self.content[:50]}..."
+
+
+class Assessment(models.Model):
+    """
+    Stores rubric assessment results for a conversation.
+    Supports multiple assessments per conversation (retries).
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    conversation = models.ForeignKey(
+        'Conversation',
+        on_delete=models.CASCADE,
+        related_name='assessments'
+    )
+
+    # Assessment results (full JSON structure)
+    results = models.JSONField(
+        help_text='Complete assessment data including categories, criteria, evidence'
+    )
+
+    # Quick access fields (denormalized for queries)
+    total_score = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Overall score for quick filtering'
+    )
+    passed = models.BooleanField(
+        default=False,
+        help_text='Whether assessment passed'
+    )
+
+    # Metadata
+    assessed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='assessments_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['conversation', '-created_at']),
+            models.Index(fields=['conversation', 'passed']),
+        ]
+
+    def __str__(self):
+        return f"Assessment {self.id} - Score: {self.total_score}"

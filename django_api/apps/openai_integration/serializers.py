@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Conversation, Message
+from .models import Conversation, Message, Assessment
 
 
 class ThreadCreateSerializer(serializers.Serializer):
@@ -187,6 +187,37 @@ class SimpleRubricRequestSerializer(serializers.Serializer):
 
 
 # ============================================================================
+# Assessment Serializers
+# ============================================================================
+
+class AssessmentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for saved Assessment model.
+    """
+    class Meta:
+        model = Assessment
+        fields = [
+            'id',
+            'conversation',
+            'results',
+            'total_score',
+            'passed',
+            'assessed_by',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class AssessmentListSerializer(serializers.ModelSerializer):
+    """
+    Lightweight serializer for listing assessments.
+    """
+    class Meta:
+        model = Assessment
+        fields = ['id', 'total_score', 'passed', 'created_at']
+
+
+# ============================================================================
 # Conversation & Message Serializers (New Chat Completions API)
 # ============================================================================
 
@@ -207,19 +238,28 @@ class ConversationListSerializer(serializers.ModelSerializer):
     user_message_count = serializers.SerializerMethodField()
     activity_title = serializers.CharField(source='activity.pre_brief', read_only=True)
     scenario_role = serializers.CharField(source='scenario.role', read_only=True)
+    latest_assessment = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = [
             'id', 'title', 'created_at', 'updated_at',
             'is_archived', 'user_message_count',
-            'activity_title', 'scenario_role'
+            'activity_title', 'scenario_role',
+            'latest_assessment'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_user_message_count(self, obj):
         """Get count of user messages."""
         return obj.get_user_message_count()
+
+    def get_latest_assessment(self, obj):
+        """Get latest assessment for this conversation."""
+        latest = obj.assessments.first()  # Already ordered by -created_at
+        if latest:
+            return AssessmentListSerializer(latest).data
+        return None
 
 
 class ConversationDetailSerializer(serializers.ModelSerializer):
