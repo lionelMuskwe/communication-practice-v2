@@ -464,6 +464,7 @@ const ChatWindow = ({
             assessment={resultsRubrics}
             evaluations={resultsRubrics?.evaluations || []}
             messages={messages}
+            conversationId={conversationId}
           />
         </DialogContent>
         <DialogActions sx={{ p: 3, pt: 2, borderTop: '1px solid #e0e0e0', gap: 1 }}>

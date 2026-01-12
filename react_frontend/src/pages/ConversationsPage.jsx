@@ -11,9 +11,11 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
+  Button,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ChatIcon from '@mui/icons-material/Chat';
+import FeedbackIcon from '@mui/icons-material/Feedback';
 import { useNavigate } from 'react-router-dom';
 import { getConversations } from '../services/apiService';
 import { setCurrentConversationId } from '../utils/storage';
@@ -205,6 +207,24 @@ const ConversationsPage = () => {
                     <Typography variant="caption" color="text.secondary">
                       Last updated: {formatDate(conversation.updated_at)}
                     </Typography>
+
+                    <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<FeedbackIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(
+                            `/home/feedback/new?conversation_id=${conversation.id}`,
+                            '_blank'
+                          );
+                        }}
+                        fullWidth
+                      >
+                        Give Feedback
+                      </Button>
+                    </Box>
                   </CardContent>
                 </CardActionArea>
               </Card>

@@ -13,6 +13,9 @@ import ChatPage from './components/chat/chat';
 import ActivitiesHome from './components/rubrics/activities_home';
 import RubricsHome from './components/rubrics/rubrics_home';
 import ConversationsPage from './pages/ConversationsPage';
+import FeedbackFormPage from './pages/FeedbackFormPage';
+import MyFeedbackPage from './pages/MyFeedbackPage';
+import FeedbackManagementPage from './pages/FeedbackManagementPage';
 
 const App = () => {
   return (
@@ -36,6 +39,9 @@ const App = () => {
             <Route path="conversations" element={<ConversationsPage />} />
             <Route path="manage_activities" element={<ActivitiesHome />} />
             <Route path="rubrics" element={<RubricsHome />} />
+            <Route path="feedback/new" element={<FeedbackFormPage />} />
+            <Route path="feedback/my-feedback" element={<MyFeedbackPage />} />
+            <Route path="feedback/manage" element={<FeedbackManagementPage />} />
           </Route>
           {/* Fallback: redirect "/" to "/home" */}
           <Route path="/" element={<Navigate to="/home" />} />

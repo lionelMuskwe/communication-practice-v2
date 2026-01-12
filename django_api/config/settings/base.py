@@ -52,6 +52,7 @@ LOCAL_APPS = [
     'apps.activities',
     'apps.openai_integration',
     'apps.users',
+    'apps.feedback',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

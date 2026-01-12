@@ -16,6 +16,7 @@ import {
   Grid,
   Tabs,
   Tab,
+  Button,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -24,6 +25,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import GradingIcon from '@mui/icons-material/Grading';
 import ChatIcon from '@mui/icons-material/Chat';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import FeedbackIcon from '@mui/icons-material/Feedback';
 import { commonStyles } from '../../theme/managementTheme';
 
 const bubble = (isUser, highlight) => ({
@@ -44,7 +46,7 @@ const TabPanel = ({ children, value, index }) => (
   </div>
 );
 
-export default function ChatResultsDialog({ assessment, messages }) {
+export default function ChatResultsDialog({ assessment, messages, conversationId }) {
   const [tabIndex, setTabIndex] = useState(0);
 
   // New payload fields - memoized to prevent unnecessary re-renders
@@ -103,6 +105,25 @@ export default function ChatResultsDialog({ assessment, messages }) {
           }}
         />
       </Tabs>
+
+      {/* Feedback Button */}
+      {conversationId && (
+        <Box sx={{ px: 3, pt: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<FeedbackIcon />}
+            onClick={() => {
+              window.open(
+                `/home/feedback/new?conversation_id=${conversationId}`,
+                '_blank'
+              );
+            }}
+            fullWidth
+          >
+            Submit Feedback on this Conversation
+          </Button>
+        </Box>
+      )}
 
       {/* Tab 1: GPT Rubric Evaluation */}
       <TabPanel value={tabIndex} index={0}>

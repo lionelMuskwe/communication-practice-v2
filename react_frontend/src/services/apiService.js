@@ -212,6 +212,7 @@ apiClient.interceptors.response.use(
 export const get  = (url, params, opts = {}) => apiClient.get(url, { params, ...opts });
 export const post = (url, data, opts = {}) => apiClient.post(url, data, { ...opts });
 export const put  = (url, data, opts = {}) => apiClient.put(url, data, { ...opts });
+export const patch = (url, data, opts = {}) => apiClient.patch(url, data, { ...opts });
 export const del  = (url, opts = {}) => apiClient.delete(url, { ...opts });
 
 // Convenience helper for long posts
@@ -441,6 +442,70 @@ export const rubricAssessmentByConversation = ({
     { conversation_id: conversationId, scenario_id: scenarioId },
     timeoutMs
   );
+
+// ─────────────────────────────────────────────────────────────
+// Feedback API endpoints
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Get all feedback entries (filtered by user role).
+ * @param {Object} params - Query parameters (status, conversation_id)
+ * @returns {Promise} Response with feedback list
+ */
+export const getFeedback = (params = {}) => get('/feedback/', params);
+
+/**
+ * Get detailed feedback entry.
+ * @param {string} feedbackId - Feedback UUID
+ * @returns {Promise} Response with feedback details
+ */
+export const getFeedbackDetail = (feedbackId) =>
+  get(`/feedback/${encodeURIComponent(feedbackId)}/`);
+
+/**
+ * Create new feedback entry.
+ * @param {Object} data - Feedback data (conversation_id, title, content)
+ * @returns {Promise} Response with created feedback
+ */
+export const createFeedback = ({ conversation_id, title, content }) =>
+  post('/feedback/', { conversation_id, title, content });
+
+/**
+ * Update feedback entry (user can update title/content).
+ * @param {string} feedbackId - Feedback UUID
+ * @param {Object} data - Updated data (title, content)
+ * @returns {Promise} Response with updated feedback
+ */
+export const updateFeedback = (feedbackId, data) =>
+  patch(`/feedback/${encodeURIComponent(feedbackId)}/`, data);
+
+/**
+ * Delete feedback entry.
+ * @param {string} feedbackId - Feedback UUID
+ * @returns {Promise} Response (204 No Content on success)
+ */
+export const deleteFeedback = (feedbackId) =>
+  del(`/feedback/${encodeURIComponent(feedbackId)}/`);
+
+/**
+ * Admin-only: Update feedback status and notes.
+ * @param {string} feedbackId - Feedback UUID
+ * @param {Object} data - Admin data (status, admin_notes)
+ * @returns {Promise} Response with updated feedback
+ */
+export const adminUpdateFeedback = (feedbackId, { status, admin_notes }) =>
+  patch(`/feedback/${encodeURIComponent(feedbackId)}/admin_update/`, {
+    status,
+    admin_notes,
+  });
+
+/**
+ * Get conversation detail.
+ * @param {string} conversationId - Conversation UUID
+ * @returns {Promise} Response with conversation details
+ */
+export const getConversationDetail = (conversationId) =>
+  get(`/conversations/${encodeURIComponent(conversationId)}/`);
 
 // Expose the client and base URL (rare cases)
 export { apiClient, API_BASE_URL };

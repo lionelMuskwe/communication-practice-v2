@@ -32,6 +32,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import PeopleIcon from '@mui/icons-material/People';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import GradingIcon from '@mui/icons-material/Grading';
+import FeedbackIcon from '@mui/icons-material/Feedback';
 
 const DRAWER_WIDTH = 280;
 
@@ -74,11 +75,13 @@ const HomeComponent = () => {
   const navigationItems = [
     { title: 'Start Practice', icon: ChatIcon, path: '/home/talk', color: '#0052CC' },
     { title: 'Conversation History', icon: HistoryIcon, path: '/home/conversations', color: '#36B37E' },
+    { title: 'My Feedback', icon: FeedbackIcon, path: '/home/feedback/my-feedback', color: '#FFAB00' },
     ...(isAdmin ? [
       { divider: true },
       { title: 'Characters', icon: PeopleIcon, path: '/home/manage', color: '#00B8D9' },
       { title: 'Activities', icon: AssignmentIcon, path: '/home/manage_activities', color: '#6554C0' },
       { title: 'Rubrics', icon: GradingIcon, path: '/home/rubrics', color: '#FF5630' },
+      { title: 'Manage Feedback', icon: FeedbackIcon, path: '/home/feedback/manage', color: '#FF5630' },
     ] : []),
   ];
 
