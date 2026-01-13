@@ -382,32 +382,62 @@ const ChatWindow = ({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden', position: 'relative' }}>
-      {/* Recording indicator - red glow around borders */}
+      {/* Recording indicator - centered microphone icon */}
       {isRecording && (
         <Box
           sx={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            pointerEvents: 'none',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
             zIndex: 9999,
-            border: '3px solid rgba(220, 38, 38, 0.6)',
-            boxShadow: 'inset 0 0 20px rgba(220, 38, 38, 0.3), 0 0 20px rgba(220, 38, 38, 0.4)',
-            animation: 'recordingPulse 2s ease-in-out infinite',
-            '@keyframes recordingPulse': {
-              '0%, 100%': {
-                boxShadow: 'inset 0 0 20px rgba(220, 38, 38, 0.3), 0 0 20px rgba(220, 38, 38, 0.4)',
-                border: '3px solid rgba(220, 38, 38, 0.6)',
-              },
-              '50%': {
-                boxShadow: 'inset 0 0 30px rgba(220, 38, 38, 0.4), 0 0 30px rgba(220, 38, 38, 0.5)',
-                border: '3px solid rgba(220, 38, 38, 0.8)',
-              },
-            },
+            pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
           }}
-        />
+        >
+          <Box
+            sx={{
+              width: 120,
+              height: 120,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(220, 38, 38, 0.9)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 32px rgba(220, 38, 38, 0.4)',
+              animation: 'micPulse 1.5s ease-in-out infinite',
+              '@keyframes micPulse': {
+                '0%, 100%': {
+                  transform: 'scale(1)',
+                  boxShadow: '0 8px 32px rgba(220, 38, 38, 0.4)',
+                },
+                '50%': {
+                  transform: 'scale(1.05)',
+                  boxShadow: '0 12px 48px rgba(220, 38, 38, 0.6)',
+                },
+              },
+            }}
+          >
+            <MicIcon sx={{ fontSize: 64, color: 'white' }} />
+          </Box>
+          <Typography
+            variant="h6"
+            sx={{
+              color: 'white',
+              fontWeight: 600,
+              textShadow: '0 2px 8px rgba(0, 0, 0, 0.5)',
+              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              px: 3,
+              py: 1,
+              borderRadius: 2,
+            }}
+          >
+            Recording...
+          </Typography>
+        </Box>
       )}
 
       {/* Header with character name */}

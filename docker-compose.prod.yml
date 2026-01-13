@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - app_network_v2
+      - app_network
 
   redis:
     image: redis:7-alpine
@@ -31,7 +31,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - app_network_v2
+      - app_network
 
   web:
     build:
@@ -54,21 +54,15 @@ services:
       OPENAI_MODEL_TUNED: ${OPENAI_MODEL_TUNED}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-
-      # Optional read only mount if you want quick template tweaks,
-      # omit entirely if you want pure image based deployment
     expose:
       - "8000"
-    ports:
-      # host 8002 -> Django v2
-      - "8002:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - app_network_v2
+      - app_network
 
   celery_worker:
     build:
@@ -95,7 +89,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - app_network_v2
+      - app_network
 
   celery_beat:
     build:
@@ -122,25 +116,22 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - app_network_v2
+      - app_network
 
   frontend:
     build:
       context: ./react_frontend
       dockerfile: Dockerfile.prod
       args:
-        REACT_APP_API_BASE: "/v2/api"
-        PUBLIC_URL: "/v2"
-    container_name: react_frontend_v2
+        REACT_APP_API_BASE: "/api"
+    container_name: react_frontend_prod
     restart: unless-stopped
-    expose:
-      - "80"
     ports:
-      - "8082:80"
+      - "80:80"
     depends_on:
       - web
     networks:
-      - app_network_v2
+      - app_network
 
 volumes:
   postgres_data_prod:
@@ -149,5 +140,5 @@ volumes:
     driver: local
 
 networks:
-  app_network_v2:
+  app_network:
     driver: bridge
