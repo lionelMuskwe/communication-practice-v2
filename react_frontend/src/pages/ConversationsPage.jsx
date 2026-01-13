@@ -70,12 +70,18 @@ const ConversationsPage = () => {
       }
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
-      dispatch(
-        showSnackbar({
-          message: 'Failed to load conversations',
-          severity: 'error',
-        })
-      );
+
+      // Only show error toast if it's not a 401 (auth error)
+      // 401 errors are handled silently by the API interceptor
+      if (error?.response?.status !== 401) {
+        dispatch(
+          showSnackbar({
+            message: 'Failed to load conversations',
+            severity: 'error',
+          })
+        );
+      }
+
       // FIX: Set empty arrays on error
       setConversations([]);
       setFilteredConversations([]);

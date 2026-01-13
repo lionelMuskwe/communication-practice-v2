@@ -110,12 +110,7 @@ apiClient.interceptors.response.use(
       // Avoid retry loop for refresh endpoint itself
       if (reqUrl.includes('/token/refresh')) {
         store.dispatch(logout());
-        store.dispatch(
-          showSnackbar({
-            message: 'Session expired. Please log in again.',
-            severity: 'error',
-          })
-        );
+        // Silent logout - no snackbar notification
         try {
           history.push('/login');
         } catch {
@@ -147,12 +142,7 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         isRefreshing = false;
         store.dispatch(logout());
-        store.dispatch(
-          showSnackbar({
-            message: 'Session expired. Please log in again.',
-            severity: 'error',
-          })
-        );
+        // Silent logout - no snackbar notification
         try {
           history.push('/login');
         } catch {
@@ -163,12 +153,7 @@ apiClient.interceptors.response.use(
     } else if (status === 401) {
       // Already retried, logout
       store.dispatch(logout());
-      store.dispatch(
-        showSnackbar({
-          message: 'Unauthorised access. Please log in again.',
-          severity: 'error',
-        })
-      );
+      // Silent logout - no snackbar notification
       try {
         history.push('/login');
       } catch {

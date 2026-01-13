@@ -48,6 +48,7 @@ const ChatWindow = ({
   const endOfMessagesRef = useRef(null);
   const streamingContentRef = useRef('');
   const audioRef = useRef(null);
+  const textInputRef = useRef(null);
 
   useEffect(() => {
     const initializeConversation = async () => {
@@ -90,6 +91,30 @@ const ChatWindow = ({
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && !e.repeat && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        startRecording();
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        stopRecording();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isRecording, conversationId, isStreaming, newMessage]);
 
   const playMessageAudio = useCallback(async (messageId) => {
     console.log('[TTS] playMessageAudio called with:', { messageId, conversationId });
@@ -144,35 +169,58 @@ const ChatWindow = ({
     }
   }, [conversationId]);
 
-  const handleMicClick = () => {
+  const startRecording = () => {
+    if (isRecording || !conversationId || isStreaming) return;
+
     setMicError('');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setMicError('Speech recognition not supported.');
       return;
     }
-    if (isRecording) {
-      recognitionRef.current?.stop();
-      setIsRecording(false);
-      return;
-    }
+
     try {
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-GB';
       recognition.interimResults = false;
+      recognition.continuous = true;
+
       recognition.onstart = () => setIsRecording(true);
-      recognition.onresult = (event) => setNewMessage(event.results[0][0].transcript);
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setNewMessage(transcript);
+      };
+
       recognition.onerror = (event) => {
         setMicError(`Speech error: ${event.error}`);
         setIsRecording(false);
       };
-      recognition.onend = () => setIsRecording(false);
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
       recognitionRef.current = recognition;
       recognition.start();
     } catch (err) {
       setMicError('Mic failed to start.');
       setIsRecording(false);
     }
+  };
+
+  const stopRecording = () => {
+    if (!isRecording) return;
+
+    recognitionRef.current?.stop();
+    setIsRecording(false);
+
+    // After transcription is complete and newMessage is set, send it
+    setTimeout(() => {
+      if (newMessage.trim()) {
+        handleSendMessage();
+      }
+    }, 300);
   };
 
   const handleSendMessage = async () => {
@@ -191,6 +239,11 @@ const ChatWindow = ({
     streamingContentRef.current = '';
     setUserMessageCount((prev) => prev + 1);
 
+    // Focus the text input after sending
+    setTimeout(() => {
+      textInputRef.current?.focus();
+    }, 100);
+
     streamMessage(
       conversationId,
       text,
@@ -208,6 +261,11 @@ const ChatWindow = ({
         setStreamingMessage('');
         streamingContentRef.current = '';
         setIsStreaming(false);
+
+        // Focus the text input after assistant responds
+        setTimeout(() => {
+          textInputRef.current?.focus();
+        }, 100);
       },
       (error) => {
         console.error('Streaming error:', error);
@@ -215,6 +273,11 @@ const ChatWindow = ({
         setStreamingMessage('');
         streamingContentRef.current = '';
         alert(`Error: ${error.message}`);
+
+        // Focus the text input even on error
+        setTimeout(() => {
+          textInputRef.current?.focus();
+        }, 100);
       },
       (messageId) => {
         // Audio ready handler - play OpenAI TTS audio
@@ -413,15 +476,24 @@ const ChatWindow = ({
             error={!!micError}
             helperText={micError}
             sx={{ '& .MuiOutlinedInput-root': { fontSize: { xs: '0.875rem', md: '1rem' } } }}
+            inputRef={textInputRef}
           />
-          <IconButton
-            onClick={handleMicClick}
-            color={isRecording ? 'secondary' : 'primary'}
-            disabled={!conversationId || isStreaming}
-            size="small"
-          >
-            <MicIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="Hold to record (or press spacebar)">
+            <span>
+              <IconButton
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onMouseLeave={stopRecording}
+                onTouchStart={startRecording}
+                onTouchEnd={stopRecording}
+                color={isRecording ? 'secondary' : 'primary'}
+                disabled={!conversationId || isStreaming}
+                size="small"
+              >
+                <MicIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
           <Fab
             color="primary"
             onClick={handleSendMessage}
