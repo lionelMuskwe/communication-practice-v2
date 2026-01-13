@@ -162,8 +162,10 @@ const Management = () => {
       filterable: false,
       resizable: false,
       flex: 1,
+      headerAlign: 'center',
+      align: 'center',
       renderCell: (params) => (
-        <Box sx={commonStyles.actionButtons}>
+        <Box sx={{ ...commonStyles.actionButtons, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
           <Tooltip title="Edit Character" arrow>
             <IconButton
               onClick={() => handleEdit(params.row.id)}
@@ -313,9 +315,15 @@ const Management = () => {
           getRowId={(row) => row.id}
           disableColumnMenu
           disableSelectionOnClick
+          rowHeight={80}
           sx={{
             '& .MuiDataGrid-cell': {
+              display: 'flex',
+              alignItems: 'center',
               py: 2,
+            },
+            '& .MuiDataGrid-row': {
+              minHeight: '80px !important',
             },
           }}
         />

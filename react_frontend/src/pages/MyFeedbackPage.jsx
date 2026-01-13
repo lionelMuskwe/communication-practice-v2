@@ -101,7 +101,7 @@ const MyFeedbackPage = () => {
           My Feedback
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          View your submitted feedback and their status
+          View your submitted feedback
         </Typography>
       </Box>
 
@@ -139,20 +139,12 @@ const MyFeedbackPage = () => {
                       {feedback.title}
                     </Typography>
 
-                    <Box sx={{ mb: 2 }}>
-                      <Chip
-                        label={feedback.status}
-                        color={getStatusColor(feedback.status)}
-                        size="small"
-                        sx={{ mb: 1 }}
-                      />
-                    </Box>
-
                     <Typography
                       variant="body2"
                       color="text.secondary"
                       gutterBottom
                       noWrap
+                      sx={{ mt: 2 }}
                     >
                       Conversation: {feedback.conversation_title}
                     </Typography>
@@ -185,15 +177,7 @@ const MyFeedbackPage = () => {
                 {selectedFeedback.title}
               </Typography>
 
-              <Box sx={{ mb: 2 }}>
-                <Chip
-                  label={selectedFeedback.status}
-                  color={getStatusColor(selectedFeedback.status)}
-                  size="small"
-                />
-              </Box>
-
-              <Typography variant="body2" color="text.secondary" gutterBottom>
+              <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mt: 2 }}>
                 Conversation: {selectedFeedback.conversation_title}
               </Typography>
 
@@ -209,24 +193,6 @@ const MyFeedbackPage = () => {
                   {selectedFeedback.content}
                 </Typography>
               </Box>
-
-              {selectedFeedback.admin_notes && (
-                <Box sx={{ mt: 2, p: 2, bgcolor: '#fff3e0', borderRadius: 1 }}>
-                  <Typography variant="subtitle2" gutterBottom color="warning.dark">
-                    Admin Notes:
-                  </Typography>
-                  <Typography variant="body2">
-                    {selectedFeedback.admin_notes}
-                  </Typography>
-                </Box>
-              )}
-
-              {selectedFeedback.reviewed_at && (
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                  Reviewed by {selectedFeedback.reviewed_by_username} on{' '}
-                  {formatDate(selectedFeedback.reviewed_at)}
-                </Typography>
-              )}
             </Box>
           )}
         </DialogContent>

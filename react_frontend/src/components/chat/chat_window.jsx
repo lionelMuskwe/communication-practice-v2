@@ -49,6 +49,8 @@ const ChatWindow = ({
   const streamingContentRef = useRef('');
   const audioRef = useRef(null);
   const textInputRef = useRef(null);
+  const shouldAutoSendRef = useRef(false);
+  const transcribedTextRef = useRef('');
 
   useEffect(() => {
     const initializeConversation = async () => {
@@ -94,16 +96,44 @@ const ChatWindow = ({
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'Space' && !e.repeat && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
-        e.preventDefault();
-        startRecording();
+      if (e.code === 'Space' && !e.repeat) {
+        const isTextInput = e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT';
+
+        // If focus is NOT in text input, start recording
+        if (!isTextInput) {
+          e.preventDefault();
+          if (!isRecording && conversationId && !isStreaming) {
+            startRecording();
+          }
+        }
+        // If focus IS in text input BUT it's empty, start recording
+        else if (isTextInput && newMessage.trim() === '') {
+          e.preventDefault();
+          if (!isRecording && conversationId && !isStreaming) {
+            startRecording();
+          }
+        }
+        // Otherwise, let spacebar work normally (add space to text)
       }
     };
 
     const handleKeyUp = (e) => {
-      if (e.code === 'Space' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
-        e.preventDefault();
-        stopRecording();
+      if (e.code === 'Space') {
+        const isTextInput = e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT';
+
+        // If focus is NOT in text input, stop recording
+        if (!isTextInput) {
+          e.preventDefault();
+          if (isRecording) {
+            stopRecording();
+          }
+        }
+        // If focus IS in text input BUT it was empty when recording started, stop recording
+        else if (isTextInput && isRecording) {
+          e.preventDefault();
+          stopRecording();
+        }
+        // Otherwise, let spacebar work normally
       }
     };
 
@@ -180,6 +210,10 @@ const ChatWindow = ({
     }
 
     try {
+      // Mark that we should auto-send after transcription
+      shouldAutoSendRef.current = true;
+      transcribedTextRef.current = '';
+
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-GB';
       recognition.interimResults = false;
@@ -189,16 +223,36 @@ const ChatWindow = ({
 
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
+        transcribedTextRef.current = transcript;
         setNewMessage(transcript);
       };
 
       recognition.onerror = (event) => {
         setMicError(`Speech error: ${event.error}`);
         setIsRecording(false);
+        shouldAutoSendRef.current = false;
       };
 
       recognition.onend = () => {
         setIsRecording(false);
+
+        // After recording ends, if we should auto-send and we have text, send it
+        const trimmedText = transcribedTextRef.current.trim();
+
+        // Check if transcription has actual words (not empty or just whitespace)
+        if (shouldAutoSendRef.current && trimmedText && trimmedText.length > 0) {
+          // Small delay to ensure state is updated
+          setTimeout(() => {
+            sendMessageWithText(transcribedTextRef.current);
+            shouldAutoSendRef.current = false;
+            transcribedTextRef.current = '';
+          }, 100);
+        } else {
+          // If empty, just clear everything without sending
+          setNewMessage('');
+          shouldAutoSendRef.current = false;
+          transcribedTextRef.current = '';
+        }
       };
 
       recognitionRef.current = recognition;
@@ -206,30 +260,22 @@ const ChatWindow = ({
     } catch (err) {
       setMicError('Mic failed to start.');
       setIsRecording(false);
+      shouldAutoSendRef.current = false;
     }
   };
 
   const stopRecording = () => {
     if (!isRecording) return;
-
     recognitionRef.current?.stop();
-    setIsRecording(false);
-
-    // After transcription is complete and newMessage is set, send it
-    setTimeout(() => {
-      if (newMessage.trim()) {
-        handleSendMessage();
-      }
-    }, 300);
   };
 
-  const handleSendMessage = async () => {
-    const text = newMessage.trim();
-    if (!text || !conversationId) return;
+  const sendMessageWithText = async (text) => {
+    const trimmedText = text.trim();
+    if (!trimmedText || !conversationId) return;
 
     const optimisticMessage = {
       role: 'user',
-      content: text,
+      content: trimmedText,
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimisticMessage]);
@@ -246,7 +292,7 @@ const ChatWindow = ({
 
     streamMessage(
       conversationId,
-      text,
+      trimmedText,
       (token) => {
         streamingContentRef.current += token;
         setStreamingMessage(streamingContentRef.current);
@@ -285,6 +331,12 @@ const ChatWindow = ({
         playMessageAudio(messageId);
       }
     );
+  };
+
+  const handleSendMessage = async () => {
+    const text = newMessage.trim();
+    if (!text || !conversationId) return;
+    sendMessageWithText(text);
   };
 
   const openDialog = async () => {
@@ -329,7 +381,35 @@ const ChatWindow = ({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden', position: 'relative' }}>
+      {/* Recording indicator - red glow around borders */}
+      {isRecording && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            pointerEvents: 'none',
+            zIndex: 9999,
+            border: '3px solid rgba(220, 38, 38, 0.6)',
+            boxShadow: 'inset 0 0 20px rgba(220, 38, 38, 0.3), 0 0 20px rgba(220, 38, 38, 0.4)',
+            animation: 'recordingPulse 2s ease-in-out infinite',
+            '@keyframes recordingPulse': {
+              '0%, 100%': {
+                boxShadow: 'inset 0 0 20px rgba(220, 38, 38, 0.3), 0 0 20px rgba(220, 38, 38, 0.4)',
+                border: '3px solid rgba(220, 38, 38, 0.6)',
+              },
+              '50%': {
+                boxShadow: 'inset 0 0 30px rgba(220, 38, 38, 0.4), 0 0 30px rgba(220, 38, 38, 0.5)',
+                border: '3px solid rgba(220, 38, 38, 0.8)',
+              },
+            },
+          }}
+        />
+      )}
+
       {/* Header with character name */}
       <Paper
         elevation={1}
@@ -478,7 +558,7 @@ const ChatWindow = ({
             sx={{ '& .MuiOutlinedInput-root': { fontSize: { xs: '0.875rem', md: '1rem' } } }}
             inputRef={textInputRef}
           />
-          <Tooltip title="Hold to record (or press spacebar)">
+          <Tooltip title="Hold to record (or hold spacebar when textbox is empty)">
             <span>
               <IconButton
                 onMouseDown={startRecording}
