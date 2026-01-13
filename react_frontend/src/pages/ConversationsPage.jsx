@@ -22,7 +22,6 @@ import { setCurrentConversationId } from '../utils/storage';
 import { useDispatch } from 'react-redux';
 import { showSnackbar } from '../features/snackbarSlice';
 import ConversationModal from '../components/ConversationModal';
-import { generateGradient } from '../utils/gradientGenerator';
 
 const ConversationsPage = () => {
   const navigate = useNavigate();
@@ -181,8 +180,7 @@ const ConversationsPage = () => {
                     left: 0,
                     right: 0,
                     height: '120px',
-                    background: generateGradient(conversation.id),
-                    opacity: 0.15,
+                    background: 'linear-gradient(135deg, #e0e0e0 0%, #f5f5f5 100%)',
                     zIndex: 0,
                   }}
                 />
@@ -209,7 +207,7 @@ const ConversationsPage = () => {
                       {conversation.title}
                     </Typography>
 
-                    <Box sx={{ mb: 2 }}>
+                    <Box sx={{ mb: 2, pb: 2 }}>
                       {conversation.activity_title && (
                         <Chip
                           label={conversation.activity_title.substring(0, 30) + '...'}
