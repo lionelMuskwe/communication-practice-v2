@@ -153,7 +153,7 @@ django_api/
 
 | Flask Endpoint | Django Endpoint | Status |
 |----------------|-----------------|--------|
-| `POST /api/login` | `POST /api/login/` | ✅ Complete |
+| `POST /api/login` | `POST /apij` | ✅ Complete |
 | `POST /api/create_users` | `POST /api/create_users/` | ✅ Complete |
 | `GET /api/all_users` | `GET /api/all_users/` | ✅ Complete |
 | `GET /api/scenarios` | `GET /api/scenarios/` | ✅ Complete |

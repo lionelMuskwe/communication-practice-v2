@@ -119,12 +119,13 @@ services:
       - app_network
 
   frontend:
+    container_name: react_frontend_prod
     build:
       context: ./react_frontend
       dockerfile: Dockerfile.prod
       args:
-        REACT_APP_API_BASE: "/api"
-    container_name: react_frontend_prod
+        REACT_APP_API_BASE: "http://localhost:8000/api"
+        REACT_APP_API_URL: "http://localhost:8000/api"
     restart: unless-stopped
     ports:
       - "80:80"
@@ -132,6 +133,7 @@ services:
       - web
     networks:
       - app_network
+
 
 volumes:
   postgres_data_prod:
