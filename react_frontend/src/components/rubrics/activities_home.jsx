@@ -27,7 +27,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import PersonIcon from '@mui/icons-material/Person';
 import CategoryIcon from '@mui/icons-material/Category';
-import { get, post, del } from '../../services/apiService';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import Switch from '@mui/material/Switch';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import { get, post, del, getPacks } from '../../services/apiService';
 import { useDispatch } from 'react-redux';
 import { showSnackbar } from '../../features/snackbarSlice';
 import { commonStyles } from '../../theme/managementTheme';
@@ -36,8 +39,9 @@ const ActivitiesHome = () => {
   const [activities, setActivities] = useState([]);
   const [characters, setCharacters] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [packs, setPacks] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [form, setForm] = useState({ id: null, pre_brief: '', character_id: '', categories: [] });
+  const [form, setForm] = useState({ id: null, pre_brief: '', character_id: '', categories: [], rubric_pack_id: '', exclude_generic_comms: false });
   const dispatch = useDispatch();
 
   const fetchData = useCallback(async () => {
@@ -45,10 +49,12 @@ const ActivitiesHome = () => {
       const activitiesRes = await get('/activities');
       const charactersRes = await get('/scenarios');
       const categoriesRes = await get('/categories');
+      const packsRes = await getPacks();
 
       setActivities(activitiesRes.data);
       setCharacters(charactersRes.data);
       setCategories(categoriesRes.data);
+      setPacks(packsRes.data);
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to fetch data', severity: 'error' }));
     }
@@ -74,7 +80,7 @@ const ActivitiesHome = () => {
       await post('/activities/', form);
       dispatch(showSnackbar({ message: 'Activity saved', severity: 'success' }));
       setOpenDialog(false);
-      setForm({ id: null, pre_brief: '', character_id: '', categories: [] });
+      setForm({ id: null, pre_brief: '', character_id: '', categories: [], rubric_pack_id: '', exclude_generic_comms: false });
       fetchData();
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to save activity', severity: 'error' }));
@@ -97,12 +103,14 @@ const ActivitiesHome = () => {
       pre_brief: activity.pre_brief,
       character_id: activity.character_id,
       categories: activity.categories,
+      rubric_pack_id: activity.rubric_pack_id || '',
+      exclude_generic_comms: activity.exclude_generic_comms || false,
     });
     setOpenDialog(true);
   };
 
   const openAddDialog = () => {
-    setForm({ id: null, pre_brief: '', character_id: '', categories: [] });
+    setForm({ id: null, pre_brief: '', character_id: '', categories: [], rubric_pack_id: '', exclude_generic_comms: false });
     setOpenDialog(true);
   };
 
@@ -175,12 +183,28 @@ const ActivitiesHome = () => {
                   </Box>
                 </Paper>
 
+                {/* Rubric Pack */}
+                <Paper elevation={0} sx={{ ...commonStyles.paperElevated, mb: 1.5, p: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <InventoryIcon fontSize="small" sx={{ color: 'secondary.main' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                      Rubric Pack:
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 500 }}>
+                      {activity.rubric_pack_name || 'None'}
+                    </Typography>
+                    {activity.exclude_generic_comms && (
+                      <Chip label="No Generic" size="small" color="warning" sx={{ ml: 'auto' }} />
+                    )}
+                  </Box>
+                </Paper>
+
                 {/* Categories */}
                 <Paper elevation={0} sx={{ ...commonStyles.paperElevated, p: 1.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <CategoryIcon fontSize="small" sx={{ color: 'primary.main' }} />
                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                      Categories:
+                      Categories (legacy):
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -315,13 +339,47 @@ const ActivitiesHome = () => {
             </FormControl>
           </Paper>
 
+          <Paper elevation={0} sx={{ ...commonStyles.paperElevated, mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <InventoryIcon fontSize="small" />
+              Rubric Pack (v2.0)
+            </Typography>
+            <FormControl fullWidth sx={{ ...commonStyles.formField, mb: 2 }}>
+              <InputLabel>Rubric Pack</InputLabel>
+              <Select
+                value={form.rubric_pack_id}
+                onChange={(e) => setForm({ ...form, rubric_pack_id: e.target.value })}
+                input={<OutlinedInput label="Rubric Pack" />}
+              >
+                <MenuItem value="">None</MenuItem>
+                {packs.map((pack) => (
+                  <MenuItem key={pack.id} value={pack.id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <InventoryIcon fontSize="small" sx={{ color: 'secondary.main' }} />
+                      {pack.name}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={form.exclude_generic_comms}
+                  onChange={(e) => setForm({ ...form, exclude_generic_comms: e.target.checked })}
+                />
+              }
+              label="Exclude Generic Communication criteria"
+            />
+          </Paper>
+
           <Paper elevation={0} sx={commonStyles.paperElevated}>
             <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
               <CategoryIcon fontSize="small" />
-              Categories
+              Categories (Legacy)
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 2, display: 'block' }}>
-              Select one or more categories for this activity
+              Legacy category system - use Rubric Pack above for new assessments
             </Typography>
             <FormControl fullWidth sx={commonStyles.formField}>
               <InputLabel>Categories</InputLabel>

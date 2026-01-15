@@ -49,6 +49,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     'apps.scenarios',
     'apps.assessments',
+    'apps.rubrics',
     'apps.activities',
     'apps.openai_integration',
     'apps.users',

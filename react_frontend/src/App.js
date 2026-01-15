@@ -12,6 +12,9 @@ import SnackbarComponent from './components/SnackBarComponent';
 import ChatPage from './components/chat/chat';
 import ActivitiesHome from './components/rubrics/activities_home';
 import RubricsHome from './components/rubrics/rubrics_home';
+import FrameworksHome from './components/rubrics/frameworks_home';
+import TemplatesHome from './components/rubrics/templates_home';
+import PacksHome from './components/rubrics/packs_home';
 import ConversationsPage from './pages/ConversationsPage';
 import FeedbackFormPage from './pages/FeedbackFormPage';
 import MyFeedbackPage from './pages/MyFeedbackPage';
@@ -39,6 +42,9 @@ const App = () => {
             <Route path="conversations" element={<ConversationsPage />} />
             <Route path="manage_activities" element={<ActivitiesHome />} />
             <Route path="rubrics" element={<RubricsHome />} />
+            <Route path="frameworks" element={<FrameworksHome />} />
+            <Route path="templates" element={<TemplatesHome />} />
+            <Route path="packs" element={<PacksHome />} />
             <Route path="feedback/new" element={<FeedbackFormPage />} />
             <Route path="feedback/my-feedback" element={<MyFeedbackPage />} />
             <Route path="feedback/manage" element={<FeedbackManagementPage />} />

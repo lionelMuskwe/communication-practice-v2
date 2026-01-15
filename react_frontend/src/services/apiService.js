@@ -511,5 +511,54 @@ export const getConversationDetail = (conversationId) =>
  */
 export const getDashboardStats = () => get('/stats/dashboard/');
 
+// ─────────────────────────────────────────────────────────────
+// Rubrics v2.0 API - Frameworks, Templates, Packs
+// ─────────────────────────────────────────────────────────────
+
+// Frameworks
+export const getFrameworks = () => get('/rubrics/frameworks/');
+export const getFramework = (id) => get(`/rubrics/frameworks/${id}/`);
+export const createFramework = (data) => post('/rubrics/frameworks/', data);
+export const updateFramework = (id, data) => put(`/rubrics/frameworks/${id}/`, data);
+export const deleteFramework = (id) => del(`/rubrics/frameworks/${id}/`);
+export const getFrameworkSections = (frameworkId) => get(`/rubrics/frameworks/${frameworkId}/sections/`);
+
+// Sections
+export const createSection = (frameworkId, data) => post(`/rubrics/frameworks/${frameworkId}/sections/`, data);
+export const updateSection = (id, data) => put(`/rubrics/sections/${id}/`, data);
+export const deleteSection = (id) => del(`/rubrics/sections/${id}/`);
+export const getSectionCriteria = (sectionId) => get(`/rubrics/sections/${sectionId}/criteria/`);
+
+// Criteria
+export const createCriterion = (sectionId, data) => post(`/rubrics/sections/${sectionId}/criteria/`, data);
+export const updateCriterion = (id, data) => put(`/rubrics/criteria/${id}/`, data);
+export const deleteCriterion = (id) => del(`/rubrics/criteria/${id}/`);
+
+// Templates
+export const getTemplates = () => get('/rubrics/templates/');
+export const getTemplate = (id) => get(`/rubrics/templates/${id}/`);
+export const createTemplate = (data) => post('/rubrics/templates/', data);
+export const updateTemplate = (id, data) => put(`/rubrics/templates/${id}/`, data);
+export const deleteTemplate = (id) => del(`/rubrics/templates/${id}/`);
+export const publishTemplate = (id) => post(`/rubrics/templates/${id}/publish/`);
+export const getTemplateCriteria = (templateId) => get(`/rubrics/templates/${templateId}/criteria/`);
+export const addTemplateCriterion = (templateId, data) => post(`/rubrics/templates/${templateId}/criteria/`, data);
+export const removeTemplateCriterion = (templateId, criterionId) => del(`/rubrics/templates/${templateId}/criteria/${criterionId}/`);
+
+// Packs
+export const getPacks = () => get('/rubrics/packs/');
+export const getPack = (id) => get(`/rubrics/packs/${id}/`);
+export const createPack = (data) => post('/rubrics/packs/', data);
+export const updatePack = (id, data) => put(`/rubrics/packs/${id}/`, data);
+export const deletePack = (id) => del(`/rubrics/packs/${id}/`);
+export const getPackTemplates = (packId) => get(`/rubrics/packs/${packId}/templates/`);
+export const addPackTemplate = (packId, data) => post(`/rubrics/packs/${packId}/templates/`, data);
+export const removePackTemplate = (packId, templateId) => del(`/rubrics/packs/${packId}/templates/${templateId}/`);
+export const getPackFullCriteria = (packId) => get(`/rubrics/packs/${packId}/full-criteria/`);
+
+// Reference Data
+export const getGMCOutcomes = () => get('/rubrics/gmc-outcomes/');
+export const getMLACapabilities = () => get('/rubrics/mla-capabilities/');
+
 // Expose the client and base URL (rare cases)
 export { apiClient, API_BASE_URL };

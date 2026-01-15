@@ -19,7 +19,12 @@ from apps.scenarios.models import AssistantScenario
 from apps.activities.models import Activity
 from .models import Conversation, Message, Assessment
 from .services import ChatCompletionService, TextToSpeechService, build_full_context, get_openai_model
-from .evaluators import CategoryRubricEvaluator, SimpleRubricEvaluator
+from .evaluators import (
+    CategoryRubricEvaluator,
+    SimpleRubricEvaluator,
+    RubricPackEvaluator,
+    get_evaluator_for_activity
+)
 from .serializers import (
     ConversationListSerializer,
     ConversationDetailSerializer,
@@ -638,8 +643,19 @@ def rubric_assessment(request, activity_id):
     elif conversation.scenario:
         scenario = conversation.scenario
 
+    # Load activity to determine which evaluator to use
     try:
-        result = CategoryRubricEvaluator.evaluate(
+        activity = Activity.objects.select_related('rubric_pack').get(id=activity_id)
+    except Activity.DoesNotExist:
+        return Response(
+            {"message": "Activity not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        # Select evaluator based on whether activity uses rubric pack
+        evaluator = get_evaluator_for_activity(activity)
+        result = evaluator.evaluate(
             activity_id=activity_id,
             messages=messages,
             scenario=scenario

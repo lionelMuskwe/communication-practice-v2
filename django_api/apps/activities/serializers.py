@@ -11,10 +11,15 @@ class ActivityListSerializer(serializers.ModelSerializer):
     Returns category IDs as list.
     """
     categories = serializers.SerializerMethodField()
+    rubric_pack_name = serializers.CharField(source='rubric_pack.name', read_only=True, allow_null=True)
 
     class Meta:
         model = Activity
-        fields = ['id', 'pre_brief', 'character_id', 'categories', 'created_at', 'updated_at']
+        fields = [
+            'id', 'pre_brief', 'character_id', 'categories',
+            'rubric_pack_id', 'rubric_pack_name', 'exclude_generic_comms',
+            'created_at', 'updated_at'
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_categories(self, obj):
@@ -28,12 +33,14 @@ class ActivityDetailSerializer(serializers.ModelSerializer):
     """
     categories = CategoryListSerializer(many=True, read_only=True)
     character = serializers.SerializerMethodField()
+    rubric_pack = serializers.SerializerMethodField()
 
     class Meta:
         model = Activity
         fields = [
             'id', 'pre_brief', 'character_id', 'character',
-            'categories', 'created_at', 'updated_at'
+            'categories', 'rubric_pack_id', 'rubric_pack', 'exclude_generic_comms',
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -45,6 +52,17 @@ class ActivityDetailSerializer(serializers.ModelSerializer):
                 'scenario_text': obj.character.scenario_text,
                 'role': obj.character.role,
                 'enable': obj.character.enable
+            }
+        return None
+
+    def get_rubric_pack(self, obj):
+        """Return rubric pack info if set."""
+        if obj.rubric_pack:
+            return {
+                'id': obj.rubric_pack.id,
+                'name': obj.rubric_pack.name,
+                'description': obj.rubric_pack.description,
+                'template_count': obj.rubric_pack.template_count,
             }
         return None
 
@@ -65,9 +83,14 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
         source='character'
     )
 
+    rubric_pack_id = serializers.IntegerField(required=False, allow_null=True)
+
     class Meta:
         model = Activity
-        fields = ['id', 'pre_brief', 'character_id', 'categories']
+        fields = [
+            'id', 'pre_brief', 'character_id', 'categories',
+            'rubric_pack_id', 'exclude_generic_comms'
+        ]
         read_only_fields = ['id']
 
     def validate_pre_brief(self, value):
@@ -91,13 +114,24 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"Categories not found: {invalid_ids}")
         return value
 
-    def create(self, validated_data):
-        """Create activity with M2M category relationships."""
-        print(f"************************\n\n {validated_data} \n\n")
-        category_ids = validated_data.pop('categories', [])
+    def validate_rubric_pack_id(self, value):
+        """Ensure rubric pack exists if provided."""
+        if value is not None:
+            from apps.rubrics.models import RubricPack
+            if not RubricPack.objects.filter(id=value).exists():
+                raise serializers.ValidationError(f"Rubric pack not found: {value}")
+        return value
 
-        # validated_data now contains:
-        # {'pre_brief': 'test 123', 'character': <AssistantScenario ...>}
+    def create(self, validated_data):
+        """Create activity with M2M category relationships and rubric pack."""
+        category_ids = validated_data.pop('categories', [])
+        rubric_pack_id = validated_data.pop('rubric_pack_id', None)
+
+        # Handle rubric pack
+        if rubric_pack_id is not None:
+            from apps.rubrics.models import RubricPack
+            validated_data['rubric_pack'] = RubricPack.objects.get(id=rubric_pack_id)
+
         activity = Activity.objects.create(**validated_data)
 
         if category_ids:
@@ -108,8 +142,17 @@ class ActivityCreateUpdateSerializer(serializers.ModelSerializer):
         return activity
 
     def update(self, instance, validated_data):
-        """Update activity including M2M category relationships."""
+        """Update activity including M2M category relationships and rubric pack."""
         category_ids = validated_data.pop('categories', None)
+        rubric_pack_id = validated_data.pop('rubric_pack_id', None)
+
+        # Handle rubric pack
+        if 'rubric_pack_id' in self.initial_data:
+            if rubric_pack_id is not None:
+                from apps.rubrics.models import RubricPack
+                instance.rubric_pack = RubricPack.objects.get(id=rubric_pack_id)
+            else:
+                instance.rubric_pack = None
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
