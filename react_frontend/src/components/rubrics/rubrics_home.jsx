@@ -40,14 +40,16 @@ const RubricsHome = () => {
         getPacks(),
       ]);
 
-      const templates = templatesRes.data || [];
+      const templates = templatesRes.data?.results || templatesRes.data || [];
       const publishedCount = templates.filter(t => t.status === 'published').length;
+      const frameworks = frameworksRes.data?.results || frameworksRes.data || [];
+      const packs = packsRes.data?.results || packsRes.data || [];
 
       setStats({
-        frameworks: frameworksRes.data?.length || 0,
+        frameworks: frameworks.length,
         templates: templates.length,
         publishedTemplates: publishedCount,
-        packs: packsRes.data?.length || 0,
+        packs: packs.length,
       });
     } catch (error) {
       console.error('Failed to fetch rubric stats:', error);

@@ -30,7 +30,7 @@ const PacksHome = () => {
   const fetchPacks = useCallback(async () => {
     try {
       const response = await getPacks();
-      setPacks(response.data || []);
+      setPacks(response.data?.results || response.data || []);
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load packs', severity: 'error' }));
     }
@@ -40,7 +40,7 @@ const PacksHome = () => {
     try {
       const response = await getTemplates();
       // Only published templates can be added to packs
-      const templateData = response.data || [];
+      const templateData = response.data?.results || response.data || [];
       setTemplates(templateData.filter(t => t.status === 'published'));
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load templates', severity: 'error' }));

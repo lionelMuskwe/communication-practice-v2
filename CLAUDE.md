@@ -3,7 +3,7 @@
 ## Frontend
 
 Ensure that any frontend design your craft has consistent layout, that is sleek, prefessional and consistent.
-Always use `response.data || []` when setting state from API responses to prevent `.map is not a function` errors.
+API responses are paginated with `{count, next, previous, results}` structure. Always use `response.data?.results || response.data || []` when setting state from API responses.
 
 ## Backend
 

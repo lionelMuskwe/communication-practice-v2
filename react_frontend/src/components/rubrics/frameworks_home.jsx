@@ -68,7 +68,7 @@ const FrameworksHome = () => {
   const fetchFrameworks = useCallback(async () => {
     try {
       const response = await getFrameworks();
-      setFrameworks(response.data || []);
+      setFrameworks(response.data?.results || response.data || []);
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load frameworks', severity: 'error' }));
     }
@@ -123,7 +123,7 @@ const FrameworksHome = () => {
     try {
       const response = await getFrameworkSections(framework.id);
       const updated = frameworks.map(f =>
-        f.id === framework.id ? { ...f, sections: response.data } : f
+        f.id === framework.id ? { ...f, sections: response.data?.results || response.data || [] } : f
       );
       setFrameworks(updated);
     } catch (error) {
@@ -153,7 +153,7 @@ const FrameworksHome = () => {
       // Refresh sections
       const response = await getFrameworkSections(currentFramework.id);
       const updated = frameworks.map(f =>
-        f.id === currentFramework.id ? { ...f, sections: response.data } : f
+        f.id === currentFramework.id ? { ...f, sections: response.data?.results || response.data || [] } : f
       );
       setFrameworks(updated);
       dispatch(showSnackbar({ message: 'Section saved successfully', severity: 'success' }));
@@ -168,7 +168,7 @@ const FrameworksHome = () => {
       // Refresh sections
       const response = await getFrameworkSections(expandedFramework);
       const updated = frameworks.map(f =>
-        f.id === expandedFramework ? { ...f, sections: response.data } : f
+        f.id === expandedFramework ? { ...f, sections: response.data?.results || response.data || [] } : f
       );
       setFrameworks(updated);
       dispatch(showSnackbar({ message: 'Section deleted', severity: 'success' }));
@@ -191,7 +191,7 @@ const FrameworksHome = () => {
           return {
             ...f,
             sections: (f.sections || []).map(s =>
-              s.id === section.id ? { ...s, criteria: response.data } : s
+              s.id === section.id ? { ...s, criteria: response.data?.results || response.data || [] } : s
             ),
           };
         }
@@ -237,7 +237,7 @@ const FrameworksHome = () => {
           return {
             ...f,
             sections: (f.sections || []).map(s =>
-              s.id === currentSection.id ? { ...s, criteria: response.data } : s
+              s.id === currentSection.id ? { ...s, criteria: response.data?.results || response.data || [] } : s
             ),
           };
         }
@@ -260,7 +260,7 @@ const FrameworksHome = () => {
           return {
             ...f,
             sections: (f.sections || []).map(s =>
-              s.id === sectionId ? { ...s, criteria: response.data } : s
+              s.id === sectionId ? { ...s, criteria: response.data?.results || response.data || [] } : s
             ),
           };
         }

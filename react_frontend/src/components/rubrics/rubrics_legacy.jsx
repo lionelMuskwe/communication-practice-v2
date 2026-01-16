@@ -44,7 +44,8 @@ const RubricsLegacy = () => {
   const fetchCategories = useCallback(async () => {
     try {
       const response = await get('/categories');
-      const normalized = response.data.map(cat => ({
+      const data = response.data?.results || response.data || [];
+      const normalized = data.map(cat => ({
         ...cat,
         rubrics: cat.subcategories || []
       }));
@@ -94,7 +95,7 @@ const RubricsLegacy = () => {
       const category = categories[index];
       const response = await get(`/categories/${category.id}/rubrics/`);
       const updated = [...categories];
-      updated[index].rubrics = response.data;
+      updated[index].rubrics = response.data?.results || response.data || [];
       setCategories(updated);
       setCurrentCategoryIndex(index);
       setOpenRubricDialog(true);

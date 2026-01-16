@@ -51,10 +51,10 @@ const ActivitiesHome = () => {
       const categoriesRes = await get('/categories');
       const packsRes = await getPacks();
 
-      setActivities(activitiesRes.data || []);
-      setCharacters(charactersRes.data || []);
-      setCategories(categoriesRes.data || []);
-      setPacks(packsRes.data || []);
+      setActivities(activitiesRes.data?.results || activitiesRes.data || []);
+      setCharacters(charactersRes.data?.results || charactersRes.data || []);
+      setCategories(categoriesRes.data?.results || categoriesRes.data || []);
+      setPacks(packsRes.data?.results || packsRes.data || []);
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to fetch data', severity: 'error' }));
     }
