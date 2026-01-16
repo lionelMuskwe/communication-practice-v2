@@ -304,7 +304,7 @@ const FrameworksHome = () => {
           key={framework.id}
           expanded={expandedFramework === framework.id}
           onChange={() => handleExpandFramework(framework)}
-          sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' } }}
+          sx={{ mb: 2, borderRadius: 2, border: '1px solid #d0d0d0', '&:before': { display: 'none' } }}
         >
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
@@ -382,7 +382,7 @@ const FrameworksHome = () => {
                     key={section.id}
                     expanded={expandedSection === section.id}
                     onChange={() => handleExpandSection(framework, section)}
-                    sx={{ mb: 1 }}
+                    sx={{ mb: 1, border: '1px solid #e0e0e0', borderRadius: 1 }}
                   >
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                       <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>

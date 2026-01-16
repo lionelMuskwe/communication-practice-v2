@@ -189,7 +189,7 @@ const TemplatesHome = () => {
       <Grid container spacing={3}>
         {(templates || []).map((template) => (
           <Grid item xs={12} md={6} lg={4} key={template.id}>
-            <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid #d0d0d0' }}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                 <Box sx={{ backgroundColor: 'primary.light', borderRadius: 2, p: 1, mr: 2 }}>
                   <DescriptionIcon sx={{ color: 'white' }} />
