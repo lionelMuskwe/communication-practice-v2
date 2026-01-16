@@ -10,20 +10,37 @@ import {
   Chip,
   IconButton,
 } from '@mui/material';
+import { keyframes } from '@mui/system';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import DescriptionIcon from '@mui/icons-material/Description';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import EastIcon from '@mui/icons-material/East';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import HistoryIcon from '@mui/icons-material/History';
 import { useNavigate } from 'react-router-dom';
 import { getFrameworks, getTemplates, getPacks } from '../../services/apiService';
 import { commonStyles } from '../../theme/managementTheme';
 
+// Animation keyframes for the pulsing glow effect
+const pulseGlow = keyframes`
+  0% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+`;
+
 const RubricsHome = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [activeStep, setActiveStep] = useState(0);
   const [stats, setStats] = useState({
     frameworks: 0,
     templates: 0,
@@ -61,6 +78,15 @@ const RubricsHome = () => {
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  // Animate through steps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % 3);
+    }, 2000); // Change step every 2 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   const workflowSteps = [
     {
@@ -174,7 +200,11 @@ const RubricsHome = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     mb: 1,
-                    boxShadow: `0 4px 12px ${step.color}40`,
+                    color: step.color,
+                    transition: 'all 0.3s ease',
+                    ...(activeStep === index && {
+                      animation: `${pulseGlow} 1.5s ease-in-out`,
+                    }),
                   }}
                 >
                   <step.icon sx={{ color: 'white', fontSize: 24 }} />
@@ -230,7 +260,7 @@ const RubricsHome = () => {
       </Paper>
 
       {/* Navigation Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3}>
         {workflowSteps.map((step) => (
           <Grid item xs={12} md={4} key={step.step}>
             <Paper
@@ -361,64 +391,6 @@ const RubricsHome = () => {
           </Grid>
         ))}
       </Grid>
-
-      {/* Legacy System Link */}
-      <Paper
-        elevation={0}
-        sx={{
-          ...commonStyles.paperCard,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 2,
-          backgroundColor: '#fafafa',
-          border: '1px dashed #ccc',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box
-            sx={{
-              backgroundColor: '#f5f5f5',
-              borderRadius: 2,
-              p: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <HistoryIcon sx={{ color: 'text.secondary' }} />
-          </Box>
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                Legacy Rubrics (v1)
-              </Typography>
-              <Chip label="Legacy" size="small" color="warning" />
-            </Box>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Access the original category-based rubric system
-            </Typography>
-          </Box>
-        </Box>
-        <Button
-          variant="outlined"
-          color="inherit"
-          endIcon={<ArrowForwardIcon />}
-          onClick={() => navigate('/home/rubrics/legacy')}
-          sx={{
-            textTransform: 'none',
-            borderColor: '#ccc',
-            color: 'text.secondary',
-            '&:hover': {
-              borderColor: '#999',
-              backgroundColor: '#f5f5f5',
-            },
-          }}
-        >
-          Open Legacy System
-        </Button>
-      </Paper>
     </Box>
   );
 };

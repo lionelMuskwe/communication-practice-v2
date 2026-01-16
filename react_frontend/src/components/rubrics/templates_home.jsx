@@ -86,10 +86,17 @@ const TemplatesHome = () => {
 
   const handleSave = async () => {
     try {
+      // Transform framework_id to framework for API
+      const payload = {
+        ...form,
+        framework: form.framework_id,
+      };
+      delete payload.framework_id;
+
       if (form.id) {
-        await updateTemplate(form.id, form);
+        await updateTemplate(form.id, payload);
       } else {
-        await createTemplate(form);
+        await createTemplate(payload);
       }
       setOpenDialog(false);
       fetchTemplates();

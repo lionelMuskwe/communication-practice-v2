@@ -403,7 +403,7 @@ const FrameworksHome = () => {
                             {section.name}
                           </Typography>
                           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            Criteria: {section.criterion_count || 0}
+                            Criteria: {(section.criteria || []).length || section.criterion_count || 0}
                           </Typography>
                         </Box>
                         <Tooltip title="Edit Section" arrow>
