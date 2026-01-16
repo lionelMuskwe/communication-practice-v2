@@ -141,7 +141,7 @@ const ActivitiesHome = () => {
 
       {/* Activities Grid */}
       <Grid container spacing={3}>
-        {activities.map((activity) => (
+        {(activities || []).map((activity) => (
           <Grid item xs={12} md={6} lg={4} key={activity.id}>
             <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column' }}>
               {/* Activity Header */}
@@ -327,7 +327,7 @@ const ActivitiesHome = () => {
                 onChange={(e) => setForm({ ...form, character_id: e.target.value })}
                 input={<OutlinedInput label="Character" />}
               >
-                {characters.map((char) => (
+                {(characters || []).map((char) => (
                   <MenuItem key={char.id} value={char.id}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <PersonIcon fontSize="small" sx={{ color: 'primary.main' }} />
@@ -352,7 +352,7 @@ const ActivitiesHome = () => {
                 input={<OutlinedInput label="Rubric Pack" />}
               >
                 <MenuItem value="">None</MenuItem>
-                {packs.map((pack) => (
+                {(packs || []).map((pack) => (
                   <MenuItem key={pack.id} value={pack.id}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <InventoryIcon fontSize="small" sx={{ color: 'secondary.main' }} />
@@ -399,7 +399,7 @@ const ActivitiesHome = () => {
                   </Box>
                 )}
               >
-                {categories.map((cat) => (
+                {(categories || []).map((cat) => (
                   <MenuItem key={cat.id} value={cat.id}>
                     <Checkbox checked={form.categories.includes(cat.id)} color="primary" />
                     <ListItemText primary={cat.name} />

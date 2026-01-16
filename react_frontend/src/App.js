@@ -43,10 +43,10 @@ const App = () => {
             <Route path="conversations" element={<ConversationsPage />} />
             <Route path="manage_activities" element={<ActivitiesHome />} />
             <Route path="rubrics" element={<RubricsHome />} />
-            <Route path="frameworks" element={<FrameworksHome />} />
-            <Route path="templates" element={<TemplatesHome />} />
-            <Route path="packs" element={<PacksHome />} />
-            <Route path="rubrics-legacy" element={<RubricsLegacy />} />
+            <Route path="rubrics/frameworks" element={<FrameworksHome />} />
+            <Route path="rubrics/templates" element={<TemplatesHome />} />
+            <Route path="rubrics/packs" element={<PacksHome />} />
+            <Route path="rubrics/legacy" element={<RubricsLegacy />} />
             <Route path="feedback/new" element={<FeedbackFormPage />} />
             <Route path="feedback/my-feedback" element={<MyFeedbackPage />} />
             <Route path="feedback/manage" element={<FeedbackManagementPage />} />

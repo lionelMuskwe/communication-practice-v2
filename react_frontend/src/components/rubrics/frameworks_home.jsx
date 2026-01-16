@@ -299,7 +299,7 @@ const FrameworksHome = () => {
       </Box>
 
       {/* Frameworks List */}
-      {frameworks.map((framework) => (
+      {(frameworks || []).map((framework) => (
         <Accordion
           key={framework.id}
           expanded={expandedFramework === framework.id}

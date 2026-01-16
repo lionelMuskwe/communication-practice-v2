@@ -139,7 +139,7 @@ const PacksHome = () => {
       </Box>
 
       <Grid container spacing={3}>
-        {packs.map((pack) => (
+        {(packs || []).map((pack) => (
           <Grid item xs={12} md={6} lg={4} key={pack.id}>
             <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
@@ -227,7 +227,7 @@ const PacksHome = () => {
             </Paper>
           ) : (
             <List>
-              {templates.map(template => (
+              {(templates || []).map(template => (
                 <ListItem key={template.id} divider>
                   <Checkbox checked={selectedTemplateIds.includes(template.id)}
                     onChange={() => handleToggleTemplate(template.id)} />

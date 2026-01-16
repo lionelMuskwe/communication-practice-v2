@@ -68,7 +68,7 @@ const RubricsHome = () => {
       icon: AccountTreeIcon,
       color: '#1976d2',
       bgColor: '#e3f2fd',
-      path: '/home/frameworks',
+      path: '/home/rubrics/frameworks',
       count: stats.frameworks,
       countLabel: 'frameworks',
       description: 'Define the criteria that assessors will evaluate. Organize criteria into sections within frameworks.',
@@ -81,7 +81,7 @@ const RubricsHome = () => {
       icon: DescriptionIcon,
       color: '#00897b',
       bgColor: '#e0f2f1',
-      path: '/home/templates',
+      path: '/home/rubrics/templates',
       count: stats.templates,
       countLabel: 'templates',
       extraStat: `${stats.publishedTemplates} published`,
@@ -95,7 +95,7 @@ const RubricsHome = () => {
       icon: Inventory2Icon,
       color: '#7b1fa2',
       bgColor: '#f3e5f5',
-      path: '/home/packs',
+      path: '/home/rubrics/packs',
       count: stats.packs,
       countLabel: 'packs',
       description: 'Bundle published templates together. Packs are assigned to activities for student assessments.',
@@ -403,7 +403,7 @@ const RubricsHome = () => {
           variant="outlined"
           color="inherit"
           endIcon={<ArrowForwardIcon />}
-          onClick={() => navigate('/home/rubrics-legacy')}
+          onClick={() => navigate('/home/rubrics/legacy')}
           sx={{
             textTransform: 'none',
             borderColor: '#ccc',

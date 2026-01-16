@@ -187,7 +187,7 @@ const TemplatesHome = () => {
       </Box>
 
       <Grid container spacing={3}>
-        {templates.map((template) => (
+        {(templates || []).map((template) => (
           <Grid item xs={12} md={6} lg={4} key={template.id}>
             <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
@@ -248,7 +248,7 @@ const TemplatesHome = () => {
             <InputLabel>Framework</InputLabel>
             <Select value={form.framework_id} onChange={(e) => setForm({ ...form, framework_id: e.target.value })}
               input={<OutlinedInput label="Framework" />}>
-              {frameworks.map(f => <MenuItem key={f.id} value={f.id}>{f.name}</MenuItem>)}
+              {(frameworks || []).map(f => <MenuItem key={f.id} value={f.id}>{f.name}</MenuItem>)}
             </Select>
           </FormControl>
           <FormControl fullWidth sx={{ mb: 2 }}>

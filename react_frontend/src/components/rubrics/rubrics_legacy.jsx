@@ -185,7 +185,7 @@ const RubricsLegacy = () => {
 
       {/* Categories Grid */}
       <Grid container spacing={3}>
-        {categories.map((cat, index) => (
+        {(categories || []).map((cat, index) => (
           <Grid item xs={12} md={6} key={cat.id}>
             <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column' }}>
               {/* Category Header */}
