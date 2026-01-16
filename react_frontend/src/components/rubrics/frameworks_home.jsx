@@ -68,7 +68,7 @@ const FrameworksHome = () => {
   const fetchFrameworks = useCallback(async () => {
     try {
       const response = await getFrameworks();
-      setFrameworks(response.data);
+      setFrameworks(response.data || []);
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load frameworks', severity: 'error' }));
     }

@@ -45,7 +45,7 @@ const TemplatesHome = () => {
   const fetchTemplates = useCallback(async () => {
     try {
       const response = await getTemplates();
-      setTemplates(response.data);
+      setTemplates(response.data || []);
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load templates', severity: 'error' }));
     }
@@ -54,7 +54,7 @@ const TemplatesHome = () => {
   const fetchFrameworks = useCallback(async () => {
     try {
       const response = await getFrameworks();
-      setFrameworks(response.data);
+      setFrameworks(response.data || []);
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load frameworks', severity: 'error' }));
     }
