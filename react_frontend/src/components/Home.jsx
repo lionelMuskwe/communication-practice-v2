@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar,
@@ -18,6 +18,7 @@ import {
   ListItemText,
   ListItemButton,
   Divider,
+  Collapse,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
@@ -33,8 +34,14 @@ import PeopleIcon from '@mui/icons-material/People';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import GradingIcon from '@mui/icons-material/Grading';
 import FeedbackIcon from '@mui/icons-material/Feedback';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import DescriptionIcon from '@mui/icons-material/Description';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
 
 const DRAWER_WIDTH = 280;
+const MENU_STATE_KEY = 'sidebar_menu_state';
 
 const HomeComponent = () => {
   const navigate = useNavigate();
@@ -49,6 +56,32 @@ const HomeComponent = () => {
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Initialize menu state from localStorage
+  const [menuOpen, setMenuOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem(MENU_STATE_KEY);
+      return saved ? JSON.parse(saved) : { rubrics: false };
+    } catch {
+      return { rubrics: false };
+    }
+  });
+
+  // Persist menu state to localStorage
+  useEffect(() => {
+    localStorage.setItem(MENU_STATE_KEY, JSON.stringify(menuOpen));
+  }, [menuOpen]);
+
+  // Auto-expand rubrics menu if on a rubrics sub-page
+  useEffect(() => {
+    if (location.pathname.startsWith('/home/rubrics/')) {
+      setMenuOpen(prev => ({ ...prev, rubrics: true }));
+    }
+  }, [location.pathname]);
+
+  const handleMenuToggle = (menu) => {
+    setMenuOpen(prev => ({ ...prev, [menu]: !prev[menu] }));
+  };
 
   const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);
@@ -80,7 +113,18 @@ const HomeComponent = () => {
       { divider: true },
       { title: 'Characters', icon: PeopleIcon, path: '/home/manage', color: '#00B8D9' },
       { title: 'Activities', icon: AssignmentIcon, path: '/home/manage_activities', color: '#6554C0' },
-      { title: 'Rubrics', icon: GradingIcon, path: '/home/rubrics', color: '#FF5630' },
+      {
+        title: 'Rubrics',
+        icon: GradingIcon,
+        path: '/home/rubrics',
+        color: '#FF5630',
+        menuKey: 'rubrics',
+        subItems: [
+          { title: 'Frameworks', icon: AccountTreeIcon, path: '/home/rubrics/frameworks', color: '#FF5630' },
+          { title: 'Templates', icon: DescriptionIcon, path: '/home/rubrics/templates', color: '#FF5630' },
+          { title: 'Packs', icon: InventoryIcon, path: '/home/rubrics/packs', color: '#FF5630' },
+        ],
+      },
       { title: 'Manage Feedback', icon: FeedbackIcon, path: '/home/feedback/manage', color: '#FF5630' },
     ] : []),
   ];
@@ -108,36 +152,94 @@ const HomeComponent = () => {
 
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
+          const hasSubItems = item.subItems && item.subItems.length > 0;
+          const isSubActive = hasSubItems && item.subItems.some(sub => location.pathname === sub.path);
 
           return (
-            <ListItem key={item.title} disablePadding sx={{ px: 2, mb: 0.5 }}>
-              <ListItemButton
-                onClick={() => {
-                  navigate(item.path);
-                  if (isMobile) handleDrawerToggle();
-                }}
-                sx={{
-                  borderRadius: 2,
-                  backgroundColor: isActive ? `${item.color}15` : 'transparent',
-                  '&:hover': {
-                    backgroundColor: isActive ? `${item.color}25` : '#F4F5F7',
-                  },
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  <Icon sx={{ color: isActive ? item.color : '#5E6C84', fontSize: 22 }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.title}
-                  primaryTypographyProps={{
-                    fontWeight: isActive ? 600 : 500,
-                    color: isActive ? item.color : '#172B4D',
-                    fontSize: '0.9375rem',
+            <React.Fragment key={item.title}>
+              <ListItem disablePadding sx={{ px: 2, mb: 0.5 }}>
+                <ListItemButton
+                  onClick={() => {
+                    if (hasSubItems) {
+                      handleMenuToggle(item.menuKey);
+                    }
+                    navigate(item.path);
+                    if (isMobile && !hasSubItems) handleDrawerToggle();
                   }}
-                />
-              </ListItemButton>
-            </ListItem>
+                  sx={{
+                    borderRadius: 2,
+                    backgroundColor: (isActive || isSubActive) ? `${item.color}15` : 'transparent',
+                    '&:hover': {
+                      backgroundColor: (isActive || isSubActive) ? `${item.color}25` : '#F4F5F7',
+                    },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <Icon sx={{ color: (isActive || isSubActive) ? item.color : '#5E6C84', fontSize: 22 }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={item.title}
+                    primaryTypographyProps={{
+                      fontWeight: (isActive || isSubActive) ? 600 : 500,
+                      color: (isActive || isSubActive) ? item.color : '#172B4D',
+                      fontSize: '0.9375rem',
+                    }}
+                  />
+                  {hasSubItems && (
+                    menuOpen[item.menuKey] ? (
+                      <ExpandLess sx={{ color: '#5E6C84' }} />
+                    ) : (
+                      <ExpandMore sx={{ color: '#5E6C84' }} />
+                    )
+                  )}
+                </ListItemButton>
+              </ListItem>
+
+              {/* Sub-items */}
+              {hasSubItems && (
+                <Collapse in={menuOpen[item.menuKey]} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {item.subItems.map((subItem) => {
+                      const SubIcon = subItem.icon;
+                      const isSubItemActive = location.pathname === subItem.path;
+
+                      return (
+                        <ListItem key={subItem.title} disablePadding sx={{ px: 2, mb: 0.5 }}>
+                          <ListItemButton
+                            onClick={() => {
+                              navigate(subItem.path);
+                              if (isMobile) handleDrawerToggle();
+                            }}
+                            sx={{
+                              borderRadius: 2,
+                              pl: 4,
+                              backgroundColor: isSubItemActive ? `${subItem.color}15` : 'transparent',
+                              '&:hover': {
+                                backgroundColor: isSubItemActive ? `${subItem.color}25` : '#F4F5F7',
+                              },
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                              <SubIcon sx={{ color: isSubItemActive ? subItem.color : '#5E6C84', fontSize: 20 }} />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={subItem.title}
+                              primaryTypographyProps={{
+                                fontWeight: isSubItemActive ? 600 : 500,
+                                color: isSubItemActive ? subItem.color : '#172B4D',
+                                fontSize: '0.875rem',
+                              }}
+                            />
+                          </ListItemButton>
+                        </ListItem>
+                      );
+                    })}
+                  </List>
+                </Collapse>
+              )}
+            </React.Fragment>
           );
         })}
       </List>
