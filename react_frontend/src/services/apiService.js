@@ -543,7 +543,7 @@ export const deleteTemplate = (id) => del(`/rubrics/templates/${id}/`);
 export const publishTemplate = (id) => post(`/rubrics/templates/${id}/publish/`);
 export const getTemplateCriteria = (templateId) => get(`/rubrics/templates/${templateId}/criteria/`);
 export const addTemplateCriterion = (templateId, data) => post(`/rubrics/templates/${templateId}/criteria/`, data);
-export const removeTemplateCriterion = (templateId, criterionId) => del(`/rubrics/templates/${templateId}/criteria/${criterionId}/`);
+export const removeTemplateCriterion = (templateId, criterionId) => del(`/rubrics/templates/${templateId}/criteria/`, { data: { criterion: criterionId } });
 
 // Packs
 export const getPacks = () => get('/rubrics/packs/');
@@ -553,7 +553,7 @@ export const updatePack = (id, data) => put(`/rubrics/packs/${id}/`, data);
 export const deletePack = (id) => del(`/rubrics/packs/${id}/`);
 export const getPackTemplates = (packId) => get(`/rubrics/packs/${packId}/templates/`);
 export const addPackTemplate = (packId, data) => post(`/rubrics/packs/${packId}/templates/`, data);
-export const removePackTemplate = (packId, templateId) => del(`/rubrics/packs/${packId}/templates/${templateId}/`);
+export const removePackTemplate = (packId, templateId) => del(`/rubrics/packs/${packId}/templates/`, { data: { template: templateId } });
 export const getPackFullCriteria = (packId) => get(`/rubrics/packs/${packId}/full-criteria/`);
 
 // Reference Data

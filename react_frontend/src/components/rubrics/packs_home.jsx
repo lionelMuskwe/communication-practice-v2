@@ -107,7 +107,7 @@ const PacksHome = () => {
       const toRemove = currentIds.filter(id => !selectedTemplateIds.includes(id));
 
       for (const id of toAdd) {
-        await addPackTemplate(currentPack.id, { template_id: id });
+        await addPackTemplate(currentPack.id, { template: id });
       }
       for (const id of toRemove) {
         await removePackTemplate(currentPack.id, id);

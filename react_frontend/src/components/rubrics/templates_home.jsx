@@ -15,7 +15,7 @@ import RuleIcon from '@mui/icons-material/Rule';
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate, publishTemplate,
   getFrameworks, getFrameworkSections, getSectionCriteria,
-  addTemplateCriterion, removeTemplateCriterion,
+  addTemplateCriterion, removeTemplateCriterion, getTemplateCriteria,
 } from '../../services/apiService';
 import { useDispatch } from 'react-redux';
 import { showSnackbar } from '../../features/snackbarSlice';
@@ -72,7 +72,7 @@ const TemplatesHome = () => {
         display_label: template.display_label,
         internal_code: template.internal_code,
         description: template.description || '',
-        framework_id: template.framework?.id || '',
+        framework_id: template.framework || '',
         track_type: template.track_type,
       });
     } else {
@@ -128,21 +128,29 @@ const TemplatesHome = () => {
 
   const handleOpenCriteriaDialog = async (template) => {
     setCurrentTemplate(template);
-    setSelectedCriteriaIds((template.criteria || []).map(c => c.criterion_id || c.id));
+    setSelectedCriteriaIds([]);
+    setAvailableCriteria([]);
 
-    if (template.framework?.id) {
-      try {
-        const sectionsRes = await getFrameworkSections(template.framework.id);
-        const sections = sectionsRes.data;
+    try {
+      // Fetch existing criteria for this template
+      const existingCriteriaRes = await getTemplateCriteria(template.id);
+      const existingCriteria = existingCriteriaRes.data?.results || existingCriteriaRes.data || [];
+      setSelectedCriteriaIds(existingCriteria.map(c => c.criterion_id || c.criterion || c.id));
+
+      // Fetch available criteria from framework sections
+      if (template.framework) {
+        const sectionsRes = await getFrameworkSections(template.framework);
+        const sections = sectionsRes.data?.results || sectionsRes.data || [];
         const allCriteria = [];
         for (const section of sections) {
           const criteriaRes = await getSectionCriteria(section.id);
-          allCriteria.push({ ...section, criteria: criteriaRes.data });
+          const criteria = criteriaRes.data?.results || criteriaRes.data || [];
+          allCriteria.push({ ...section, criteria });
         }
         setAvailableCriteria(allCriteria);
-      } catch (error) {
-        dispatch(showSnackbar({ message: 'Failed to load criteria', severity: 'error' }));
       }
+    } catch (error) {
+      dispatch(showSnackbar({ message: 'Failed to load criteria', severity: 'error' }));
     }
     setOpenCriteriaDialog(true);
   };
@@ -157,12 +165,16 @@ const TemplatesHome = () => {
 
   const handleSaveCriteria = async () => {
     try {
-      const currentIds = (currentTemplate.criteria || []).map(c => c.criterion_id || c.id);
+      // Fetch current criteria from API to get accurate comparison
+      const existingCriteriaRes = await getTemplateCriteria(currentTemplate.id);
+      const existingCriteria = existingCriteriaRes.data?.results || existingCriteriaRes.data || [];
+      const currentIds = existingCriteria.map(c => c.criterion_id || c.criterion || c.id);
+
       const toAdd = selectedCriteriaIds.filter(id => !currentIds.includes(id));
       const toRemove = currentIds.filter(id => !selectedCriteriaIds.includes(id));
 
       for (const id of toAdd) {
-        await addTemplateCriterion(currentTemplate.id, { criterion_id: id });
+        await addTemplateCriterion(currentTemplate.id, { criterion: id });
       }
       for (const id of toRemove) {
         await removeTemplateCriterion(currentTemplate.id, id);
@@ -213,7 +225,7 @@ const TemplatesHome = () => {
               <Box sx={{ flex: 1, mb: 2 }}>
                 <Paper elevation={0} sx={{ ...commonStyles.paperElevated, p: 1.5, mb: 1 }}>
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>Framework:</Typography>
-                  <Typography variant="body2">{template.framework?.name || 'None'}</Typography>
+                  <Typography variant="body2">{template.framework_name || 'None'}</Typography>
                 </Paper>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Chip label={template.track_type === 'generic_comms' ? 'Generic' : 'Clinical'} size="small" variant="outlined" />
