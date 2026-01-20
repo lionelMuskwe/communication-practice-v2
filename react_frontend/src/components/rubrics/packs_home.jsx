@@ -3,6 +3,7 @@ import {
   Box, Typography, TextField, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Paper, Chip, Tooltip, Grid, List, ListItem,
   ListItemText, ListItemButton, Checkbox, Divider, Pagination,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -208,68 +209,97 @@ const PacksHome = () => {
         </Button>
       </Box>
 
-      <Grid container spacing={3}>
-        {(paginatedPacks || []).map((pack) => {
-          const packTemplates = getPackTemplatesList(pack.id);
-          return (
-            <Grid item xs={12} md={6} lg={4} key={pack.id}>
-              <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid #d0d0d0' }}>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                  <Box sx={{ backgroundColor: 'secondary.light', borderRadius: 2, p: 1, mr: 2 }}>
-                    <InventoryIcon sx={{ color: 'white' }} />
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{pack.name}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {pack.description || 'No description'}
-                    </Typography>
-                  </Box>
-                  <Chip label={pack.is_active ? 'Active' : 'Inactive'} size="small"
-                    color={pack.is_active ? 'success' : 'default'} />
-                </Box>
-
-                <Box sx={{ flex: 1, mb: 2 }}>
-                  <Paper elevation={0} sx={{ ...commonStyles.paperElevated, p: 1.5 }}>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
-                      Templates ({packTemplates.length}):
-                    </Typography>
-                    {packTemplates.length === 0 ? (
-                      <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-                        No templates assigned
+{packs.length > 0 && (
+        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ fontWeight: 600 }}>Pack Name</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Templates</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(paginatedPacks || []).map((pack) => {
+                const packTemplates = getPackTemplatesList(pack.id);
+                return (
+                  <TableRow
+                    key={pack.id}
+                    sx={{ '&:hover': { bgcolor: 'grey.50' } }}
+                  >
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {pack.name}
                       </Typography>
-                    ) : (
-                      <List dense disablePadding>
-                        {packTemplates.map((t, index) => (
-                          <React.Fragment key={t.template || t.template_id || t.id}>
-                            <ListItemButton
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        {pack.description || '—'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      {packTemplates.length === 0 ? (
+                        <Typography variant="body2" sx={{ color: 'text.disabled' }}>
+                          None
+                        </Typography>
+                      ) : (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {packTemplates.slice(0, 3).map((t) => (
+                            <Chip
+                              key={t.template || t.template_id || t.id}
+                              label={t.template_name || t.display_label || t.name}
+                              size="small"
+                              variant="outlined"
                               onClick={() => handleViewTemplate(t)}
-                              sx={{ py: 0.5, px: 1, borderRadius: 1, '&:hover': { backgroundColor: 'action.hover' } }}
-                            >
-                              <DescriptionIcon sx={{ fontSize: 16, mr: 1, color: 'primary.main' }} />
-                              <ListItemText
-                                primary={t.template_name || t.display_label || t.name}
-                                primaryTypographyProps={{ variant: 'body2' }}
-                              />
-                              <VisibilityIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                            </ListItemButton>
-                            {index < packTemplates.length - 1 && <Divider />}
-                          </React.Fragment>
-                        ))}
-                      </List>
-                    )}
-                  </Paper>
-                </Box>
-
-                <Box sx={{ ...commonStyles.actionButtons, pt: 2, borderTop: '1px solid #e0e0e0' }}>
-                  <Tooltip title="Edit"><IconButton onClick={() => handleOpenDialog(pack)} size="small"><EditIcon fontSize="small" /></IconButton></Tooltip>
-                  <Tooltip title="Manage Templates"><IconButton onClick={() => handleOpenTemplatesDialog(pack)} color="secondary" size="small"><DescriptionIcon fontSize="small" /></IconButton></Tooltip>
-                  <Tooltip title="Delete"><IconButton onClick={() => handleDelete(pack.id)} color="error" size="small"><DeleteIcon fontSize="small" /></IconButton></Tooltip>
-                </Box>
-              </Paper>
-            </Grid>
-          );
-        })}
-      </Grid>
+                              sx={{ cursor: 'pointer' }}
+                            />
+                          ))}
+                          {packTemplates.length > 3 && (
+                            <Chip
+                              label={`+${packTemplates.length - 3} more`}
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                            />
+                          )}
+                        </Box>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={pack.is_active ? 'Active' : 'Inactive'}
+                        size="small"
+                        color={pack.is_active ? 'success' : 'default'}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                        <Tooltip title="Edit">
+                          <IconButton onClick={() => handleOpenDialog(pack)} size="small">
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Manage Templates">
+                          <IconButton onClick={() => handleOpenTemplatesDialog(pack)} color="secondary" size="small">
+                            <DescriptionIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete">
+                          <IconButton onClick={() => handleDelete(pack.id)} color="error" size="small">
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -293,10 +323,13 @@ const PacksHome = () => {
         </Box>
       )}
 
-      {packs.length === 0 && (
-        <Paper elevation={0} sx={{ ...commonStyles.paperCard, textAlign: 'center', py: 8 }}>
+{packs.length === 0 && (
+        <Paper elevation={0} sx={{ border: '1px solid #e0e0e0', textAlign: 'center', py: 8, borderRadius: 2 }}>
           <InventoryIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" sx={{ color: 'text.secondary', mb: 1 }}>No Packs Yet</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+            Create a pack to bundle templates together
+          </Typography>
           <Button variant="contained" onClick={() => handleOpenDialog()} startIcon={<AddIcon />}>Add Pack</Button>
         </Paper>
       )}
