@@ -4,7 +4,7 @@ import {
   DialogActions, IconButton, Paper, Chip, Tooltip, Grid, Select, MenuItem,
   FormControl, InputLabel, OutlinedInput, Checkbox, Accordion,
   AccordionSummary, AccordionDetails, Pagination, List, ListItem, ListItemButton,
-  InputAdornment,
+  InputAdornment, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -348,46 +348,95 @@ const TemplatesHome = () => {
         </Button>
       </Box>
 
-      <Grid container spacing={3}>
-        {(paginatedTemplates || []).map((template) => (
-          <Grid item xs={12} md={6} lg={4} key={template.id}>
-            <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid #d0d0d0' }}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                <Box sx={{ backgroundColor: 'primary.light', borderRadius: 2, p: 1, mr: 2 }}>
-                  <DescriptionIcon sx={{ color: 'white' }} />
-                </Box>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>{template.display_label}</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {template.internal_code}
-                  </Typography>
-                </Box>
-                <Chip label={template.status} size="small" color={STATUS_COLORS[template.status]} />
-              </Box>
-
-              <Box sx={{ flex: 1, mb: 2 }}>
-                <Paper elevation={0} sx={{ ...commonStyles.paperElevated, p: 1.5, mb: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>Framework:</Typography>
-                  <Typography variant="body2">{template.framework_name || 'None'}</Typography>
-                </Paper>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Chip label={template.track_type === 'generic_comms' ? 'Generic' : 'Clinical'} size="small" variant="outlined" />
-                  <Chip label={`${template.criteria_count || 0} criteria`} size="small" variant="outlined" />
-                </Box>
-              </Box>
-
-              <Box sx={{ ...commonStyles.actionButtons, pt: 2, borderTop: '1px solid #e0e0e0' }}>
-                <Tooltip title="Edit"><IconButton onClick={() => handleOpenDialog(template)} size="small"><EditIcon fontSize="small" /></IconButton></Tooltip>
-                <Tooltip title="Manage Criteria"><IconButton onClick={() => handleOpenCriteriaDialog(template)} color="secondary" size="small"><RuleIcon fontSize="small" /></IconButton></Tooltip>
-                {template.status === 'draft' && (
-                  <Tooltip title="Publish"><IconButton onClick={() => handlePublish(template.id)} color="success" size="small"><PublishIcon fontSize="small" /></IconButton></Tooltip>
-                )}
-                <Tooltip title="Delete"><IconButton onClick={() => handleDelete(template.id)} color="error" size="small"><DeleteIcon fontSize="small" /></IconButton></Tooltip>
-              </Box>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
+{templates.length > 0 && (
+        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ fontWeight: 600 }}>Template Name</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Code</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Framework</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Track Type</TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="center">Criteria</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(paginatedTemplates || []).map((template) => (
+                <TableRow
+                  key={template.id}
+                  sx={{ '&:hover': { bgcolor: 'grey.50' } }}
+                >
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {template.display_label}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      {template.internal_code}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">
+                      {template.framework_name || '—'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={template.track_type === 'generic_comms' ? 'Generic' : 'Clinical'}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell align="center">
+                    <Chip
+                      label={template.criteria_count || 0}
+                      size="small"
+                      variant="outlined"
+                      color="primary"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={template.status}
+                      size="small"
+                      color={STATUS_COLORS[template.status]}
+                    />
+                  </TableCell>
+                  <TableCell align="right">
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      <Tooltip title="Edit">
+                        <IconButton onClick={() => handleOpenDialog(template)} size="small">
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Manage Criteria">
+                        <IconButton onClick={() => handleOpenCriteriaDialog(template)} color="secondary" size="small">
+                          <RuleIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {template.status === 'draft' && (
+                        <Tooltip title="Publish">
+                          <IconButton onClick={() => handlePublish(template.id)} color="success" size="small">
+                            <PublishIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Delete">
+                        <IconButton onClick={() => handleDelete(template.id)} color="error" size="small">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -411,10 +460,13 @@ const TemplatesHome = () => {
         </Box>
       )}
 
-      {templates.length === 0 && (
-        <Paper elevation={0} sx={{ ...commonStyles.paperCard, textAlign: 'center', py: 8 }}>
+{templates.length === 0 && (
+        <Paper elevation={0} sx={{ border: '1px solid #e0e0e0', textAlign: 'center', py: 8, borderRadius: 2 }}>
           <DescriptionIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" sx={{ color: 'text.secondary', mb: 1 }}>No Templates Yet</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+            Create a template to get started
+          </Typography>
           <Button variant="contained" onClick={() => handleOpenDialog()} startIcon={<AddIcon />}>Add Template</Button>
         </Paper>
       )}
