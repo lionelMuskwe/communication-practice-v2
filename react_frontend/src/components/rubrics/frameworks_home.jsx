@@ -18,6 +18,7 @@ import {
   AccordionDetails,
   Switch,
   FormControlLabel,
+  Pagination,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -44,6 +45,8 @@ import { useDispatch } from 'react-redux';
 import { showSnackbar } from '../../features/snackbarSlice';
 import { commonStyles } from '../../theme/managementTheme';
 
+const ITEMS_PER_PAGE = 25;
+
 const FrameworksHome = () => {
   const [frameworks, setFrameworks] = useState([]);
   const [openFrameworkDialog, setOpenFrameworkDialog] = useState(false);
@@ -63,7 +66,21 @@ const FrameworksHome = () => {
   });
   const [expandedFramework, setExpandedFramework] = useState(null);
   const [expandedSection, setExpandedSection] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const dispatch = useDispatch();
+
+  // Pagination calculations
+  const totalPages = Math.ceil(frameworks.length / ITEMS_PER_PAGE);
+  const paginatedFrameworks = frameworks.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handlePageChange = (event, page) => {
+    setCurrentPage(page);
+    setExpandedFramework(null); // Close expanded accordion when changing pages
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const fetchFrameworks = useCallback(async () => {
     try {
@@ -299,7 +316,7 @@ const FrameworksHome = () => {
       </Box>
 
       {/* Frameworks List */}
-      {(frameworks || []).map((framework) => (
+      {(paginatedFrameworks || []).map((framework) => (
         <Accordion
           key={framework.id}
           expanded={expandedFramework === framework.id}
@@ -510,6 +527,28 @@ const FrameworksHome = () => {
           </AccordionDetails>
         </Accordion>
       ))}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mt: 4, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={currentPage}
+            onChange={handlePageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontWeight: 500,
+              },
+            }}
+          />
+          <Typography variant="body2" sx={{ ml: 2, color: 'text.secondary' }}>
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, frameworks.length)} of {frameworks.length}
+          </Typography>
+        </Box>
+      )}
 
       {/* Empty State */}
       {frameworks.length === 0 && (

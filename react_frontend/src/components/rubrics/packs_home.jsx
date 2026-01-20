@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, TextField, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Paper, Chip, Tooltip, Grid, List, ListItem,
-  ListItemText, ListItemButton, Checkbox, Divider,
+  ListItemText, ListItemButton, Checkbox, Divider, Pagination,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -20,6 +20,8 @@ import { useNavigate } from 'react-router-dom';
 import { showSnackbar } from '../../features/snackbarSlice';
 import { commonStyles } from '../../theme/managementTheme';
 
+const ITEMS_PER_PAGE = 25;
+
 const PacksHome = () => {
   const [packs, setPacks] = useState([]);
   const [packTemplatesMap, setPackTemplatesMap] = useState({});
@@ -32,8 +34,21 @@ const PacksHome = () => {
   const [viewTemplateCriteria, setViewTemplateCriteria] = useState([]);
   const [form, setForm] = useState({ id: null, name: '', description: '' });
   const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  // Pagination calculations
+  const totalPages = Math.ceil(packs.length / ITEMS_PER_PAGE);
+  const paginatedPacks = packs.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handlePageChange = (event, page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const fetchPackTemplates = useCallback(async (packId) => {
     try {
@@ -169,7 +184,7 @@ const PacksHome = () => {
 
   const handleEditTemplate = () => {
     setOpenViewModal(false);
-    navigate('/rubrics/templates');
+    navigate('/home/rubrics/templates');
   };
 
   const getPackTemplatesList = (packId) => {
@@ -194,7 +209,7 @@ const PacksHome = () => {
       </Box>
 
       <Grid container spacing={3}>
-        {(packs || []).map((pack) => {
+        {(paginatedPacks || []).map((pack) => {
           const packTemplates = getPackTemplatesList(pack.id);
           return (
             <Grid item xs={12} md={6} lg={4} key={pack.id}>
@@ -255,6 +270,28 @@ const PacksHome = () => {
           );
         })}
       </Grid>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mt: 4, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={currentPage}
+            onChange={handlePageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontWeight: 500,
+              },
+            }}
+          />
+          <Typography variant="body2" sx={{ ml: 2, color: 'text.secondary' }}>
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, packs.length)} of {packs.length}
+          </Typography>
+        </Box>
+      )}
 
       {packs.length === 0 && (
         <Paper elevation={0} sx={{ ...commonStyles.paperCard, textAlign: 'center', py: 8 }}>

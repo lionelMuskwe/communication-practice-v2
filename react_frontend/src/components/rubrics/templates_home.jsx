@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Box, Typography, TextField, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Paper, Chip, Tooltip, Grid, Select, MenuItem,
-  FormControl, InputLabel, OutlinedInput, Checkbox, ListItemText, Accordion,
-  AccordionSummary, AccordionDetails,
+  FormControl, InputLabel, OutlinedInput, Checkbox, Accordion,
+  AccordionSummary, AccordionDetails, Pagination, List, ListItem, ListItemButton,
+  InputAdornment,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -12,6 +13,13 @@ import PublishIcon from '@mui/icons-material/Publish';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DescriptionIcon from '@mui/icons-material/Description';
 import RuleIcon from '@mui/icons-material/Rule';
+import SearchIcon from '@mui/icons-material/Search';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight';
+import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloseIcon from '@mui/icons-material/Close';
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate, publishTemplate,
   getFrameworks, getFrameworkSections, getSectionCriteria,
@@ -27,6 +35,7 @@ const TRACK_TYPES = [
 ];
 
 const STATUS_COLORS = { draft: 'warning', published: 'success', archived: 'default' };
+const ITEMS_PER_PAGE = 25;
 
 const TemplatesHome = () => {
   const [templates, setTemplates] = useState([]);
@@ -40,7 +49,23 @@ const TemplatesHome = () => {
   });
   const [availableCriteria, setAvailableCriteria] = useState([]);
   const [selectedCriteriaIds, setSelectedCriteriaIds] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [leftChecked, setLeftChecked] = useState([]);      // IDs checked in left panel
+  const [searchQuery, setSearchQuery] = useState('');       // Search filter
+  const [orderedSelection, setOrderedSelection] = useState([]); // Ordered selected criteria objects
   const dispatch = useDispatch();
+
+  // Pagination calculations
+  const totalPages = Math.ceil(templates.length / ITEMS_PER_PAGE);
+  const paginatedTemplates = templates.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handlePageChange = (event, page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -130,54 +155,172 @@ const TemplatesHome = () => {
     setCurrentTemplate(template);
     setSelectedCriteriaIds([]);
     setAvailableCriteria([]);
+    setLeftChecked([]);
+    setSearchQuery('');
+    setOrderedSelection([]);
 
     try {
-      // Fetch existing criteria for this template
-      const existingCriteriaRes = await getTemplateCriteria(template.id);
-      const existingCriteria = existingCriteriaRes.data?.results || existingCriteriaRes.data || [];
-      setSelectedCriteriaIds(existingCriteria.map(c => c.criterion_id || c.criterion || c.id));
-
-      // Fetch available criteria from framework sections
+      // Fetch available criteria from framework sections first
+      let allSections = [];
       if (template.framework) {
         const sectionsRes = await getFrameworkSections(template.framework);
         const sections = sectionsRes.data?.results || sectionsRes.data || [];
-        const allCriteria = [];
         for (const section of sections) {
           const criteriaRes = await getSectionCriteria(section.id);
           const criteria = criteriaRes.data?.results || criteriaRes.data || [];
-          allCriteria.push({ ...section, criteria });
+          allSections.push({ ...section, criteria });
         }
-        setAvailableCriteria(allCriteria);
+        setAvailableCriteria(allSections);
       }
+
+      // Fetch existing criteria for this template
+      const existingCriteriaRes = await getTemplateCriteria(template.id);
+      const existingCriteria = existingCriteriaRes.data?.results || existingCriteriaRes.data || [];
+
+      // Build ordered selection from existing criteria, preserving order
+      const sortedExisting = [...existingCriteria].sort((a, b) => (a.ordering || 0) - (b.ordering || 0));
+      const orderedCriteria = [];
+
+      for (const existing of sortedExisting) {
+        const criterionId = existing.criterion_id || existing.criterion || existing.id;
+        // Find this criterion in available sections
+        for (const section of allSections) {
+          const found = (section.criteria || []).find(c => c.id === criterionId);
+          if (found) {
+            orderedCriteria.push({
+              ...found,
+              sectionId: section.id,
+              sectionCode: section.code,
+              sectionName: section.name,
+            });
+            break;
+          }
+        }
+      }
+      setOrderedSelection(orderedCriteria);
+      setSelectedCriteriaIds(orderedCriteria.map(c => c.id));
     } catch (error) {
       dispatch(showSnackbar({ message: 'Failed to load criteria', severity: 'error' }));
     }
     setOpenCriteriaDialog(true);
   };
 
-  const handleToggleCriterion = (criterionId) => {
-    setSelectedCriteriaIds(prev =>
+  // Transfer list helper: get all criteria as flat list with section info
+  const getAllCriteria = useMemo(() => {
+    const result = [];
+    availableCriteria.forEach(section => {
+      (section.criteria || []).forEach(criterion => {
+        result.push({
+          ...criterion,
+          sectionId: section.id,
+          sectionCode: section.code,
+          sectionName: section.name,
+        });
+      });
+    });
+    return result;
+  }, [availableCriteria]);
+
+  // Filter available criteria by search query and exclude already selected
+  const filteredAvailableCriteria = useMemo(() => {
+    const selectedIds = orderedSelection.map(c => c.id);
+    return availableCriteria.map(section => {
+      const filteredCriteria = (section.criteria || []).filter(criterion => {
+        const matchesSearch = !searchQuery ||
+          criterion.criterion_text.toLowerCase().includes(searchQuery.toLowerCase());
+        const notSelected = !selectedIds.includes(criterion.id);
+        return matchesSearch && notSelected;
+      });
+      return { ...section, criteria: filteredCriteria };
+    }).filter(section => section.criteria.length > 0);
+  }, [availableCriteria, searchQuery, orderedSelection]);
+
+  // Toggle checkbox in left panel
+  const handleToggleLeftCheck = (criterionId) => {
+    setLeftChecked(prev =>
       prev.includes(criterionId)
         ? prev.filter(id => id !== criterionId)
         : [...prev, criterionId]
     );
   };
 
+  // Move checked items from left to right
+  const handleMoveRight = () => {
+    const toMove = getAllCriteria.filter(c => leftChecked.includes(c.id));
+    setOrderedSelection(prev => [...prev, ...toMove]);
+    setLeftChecked([]);
+  };
+
+  // Move all available items to right
+  const handleMoveAllRight = () => {
+    const selectedIds = orderedSelection.map(c => c.id);
+    const toMove = getAllCriteria.filter(c => !selectedIds.includes(c.id));
+    setOrderedSelection(prev => [...prev, ...toMove]);
+    setLeftChecked([]);
+  };
+
+  // Remove specific item from right panel
+  const handleRemoveFromSelection = (criterionId) => {
+    setOrderedSelection(prev => prev.filter(c => c.id !== criterionId));
+  };
+
+  // Remove all selected items (clear right panel)
+  const handleMoveAllLeft = () => {
+    setOrderedSelection([]);
+    setLeftChecked([]);
+  };
+
+  // Move item up in the ordered list
+  const handleMoveUp = (index) => {
+    if (index === 0) return;
+    setOrderedSelection(prev => {
+      const newOrder = [...prev];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      return newOrder;
+    });
+  };
+
+  // Move item down in the ordered list
+  const handleMoveDown = (index) => {
+    setOrderedSelection(prev => {
+      if (index === prev.length - 1) return prev;
+      const newOrder = [...prev];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      return newOrder;
+    });
+  };
+
+  // Get section summary for selected criteria
+  const getSectionSummary = useMemo(() => {
+    const summary = {};
+    orderedSelection.forEach(c => {
+      const key = c.sectionCode || 'Unknown';
+      if (!summary[key]) {
+        summary[key] = { code: c.sectionCode, name: c.sectionName, count: 0 };
+      }
+      summary[key].count++;
+    });
+    return Object.values(summary);
+  }, [orderedSelection]);
+
   const handleSaveCriteria = async () => {
     try {
-      // Fetch current criteria from API to get accurate comparison
+      // Fetch current criteria from API to get all existing IDs
       const existingCriteriaRes = await getTemplateCriteria(currentTemplate.id);
       const existingCriteria = existingCriteriaRes.data?.results || existingCriteriaRes.data || [];
-      const currentIds = existingCriteria.map(c => c.criterion_id || c.criterion || c.id);
+      const existingIds = existingCriteria.map(c => c.criterion_id || c.criterion || c.id);
 
-      const toAdd = selectedCriteriaIds.filter(id => !currentIds.includes(id));
-      const toRemove = currentIds.filter(id => !selectedCriteriaIds.includes(id));
-
-      for (const id of toAdd) {
-        await addTemplateCriterion(currentTemplate.id, { criterion: id });
-      }
-      for (const id of toRemove) {
+      // Remove all existing criteria first to ensure clean ordering
+      for (const id of existingIds) {
         await removeTemplateCriterion(currentTemplate.id, id);
+      }
+
+      // Add all selected criteria with correct ordering
+      for (let i = 0; i < orderedSelection.length; i++) {
+        await addTemplateCriterion(currentTemplate.id, {
+          criterion: orderedSelection[i].id,
+          ordering: i + 1,
+        });
       }
 
       setOpenCriteriaDialog(false);
@@ -206,7 +349,7 @@ const TemplatesHome = () => {
       </Box>
 
       <Grid container spacing={3}>
-        {(templates || []).map((template) => (
+        {(paginatedTemplates || []).map((template) => (
           <Grid item xs={12} md={6} lg={4} key={template.id}>
             <Paper elevation={0} sx={{ ...commonStyles.paperCard, height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid #d0d0d0' }}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
@@ -245,6 +388,28 @@ const TemplatesHome = () => {
           </Grid>
         ))}
       </Grid>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mt: 4, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={currentPage}
+            onChange={handlePageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontWeight: 500,
+              },
+            }}
+          />
+          <Typography variant="body2" sx={{ ml: 2, color: 'text.secondary' }}>
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, templates.length)} of {templates.length}
+          </Typography>
+        </Box>
+      )}
 
       {templates.length === 0 && (
         <Paper elevation={0} sx={{ ...commonStyles.paperCard, textAlign: 'center', py: 8 }}>
@@ -286,36 +451,275 @@ const TemplatesHome = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Criteria Selection Dialog */}
-      <Dialog open={openCriteriaDialog} onClose={() => setOpenCriteriaDialog(false)} fullWidth maxWidth="md">
-        <DialogTitle>Select Criteria for {currentTemplate?.display_label}</DialogTitle>
-        <DialogContent>
-          {availableCriteria.map(section => (
-            <Accordion key={section.id}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography sx={{ fontWeight: 600 }}>{section.code} - {section.name}</Typography>
-                <Chip label={`${(section.criteria || []).filter(c => selectedCriteriaIds.includes(c.id)).length}/${(section.criteria || []).length}`} size="small" sx={{ ml: 2 }} />
-              </AccordionSummary>
-              <AccordionDetails>
-                {(section.criteria || []).map(criterion => (
-                  <Box key={criterion.id} sx={{ display: 'flex', alignItems: 'center', py: 1, borderBottom: '1px solid #eee' }}>
-                    <Checkbox checked={selectedCriteriaIds.includes(criterion.id)}
-                      onChange={() => handleToggleCriterion(criterion.id)} />
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2">{criterion.criterion_text}</Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Weight: {criterion.weight} {criterion.is_required && '| Required'}
+      {/* Criteria Selection Dialog - Transfer List Design */}
+      <Dialog open={openCriteriaDialog} onClose={() => setOpenCriteriaDialog(false)} fullWidth maxWidth="lg">
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">Select Criteria for {currentTemplate?.display_label}</Typography>
+          <IconButton onClick={() => setOpenCriteriaDialog(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          {/* Search Input */}
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search criteria..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ mb: 2 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              ),
+            }}
+          />
+
+          {/* Two-Panel Layout */}
+          <Grid container spacing={2}>
+            {/* Left Panel - Available Criteria */}
+            <Grid item xs={12} md={5}>
+              <Paper
+                elevation={0}
+                sx={{
+                  border: '1px solid #e0e0e0',
+                  borderRadius: 2,
+                  height: 450,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <Box sx={{ p: 1.5, borderBottom: '1px solid #e0e0e0', bgcolor: 'grey.50' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    AVAILABLE CRITERIA
+                  </Typography>
+                </Box>
+                <Box sx={{ flex: 1, overflow: 'auto' }}>
+                  {filteredAvailableCriteria.length === 0 ? (
+                    <Box sx={{ p: 3, textAlign: 'center' }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        {searchQuery ? 'No criteria match your search' : 'All criteria have been selected'}
                       </Typography>
                     </Box>
+                  ) : (
+                    filteredAvailableCriteria.map(section => {
+                      const selectedInSection = orderedSelection.filter(c => c.sectionId === section.id).length;
+                      const totalInSection = availableCriteria.find(s => s.id === section.id)?.criteria?.length || 0;
+                      return (
+                        <Accordion key={section.id} disableGutters elevation={0}>
+                          <AccordionSummary
+                            expandIcon={<ExpandMoreIcon />}
+                            sx={{ bgcolor: 'grey.50', minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}
+                          >
+                            <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
+                              {section.code} - {section.name}
+                            </Typography>
+                            <Chip
+                              label={`${selectedInSection}/${totalInSection}`}
+                              size="small"
+                              color={selectedInSection > 0 ? 'primary' : 'default'}
+                              sx={{ ml: 1, mr: 1, height: 22 }}
+                            />
+                          </AccordionSummary>
+                          <AccordionDetails sx={{ p: 0 }}>
+                            <List dense disablePadding>
+                              {(section.criteria || []).map(criterion => (
+                                <ListItem
+                                  key={criterion.id}
+                                  disablePadding
+                                  sx={{ borderBottom: '1px solid #f0f0f0' }}
+                                >
+                                  <ListItemButton
+                                    onClick={() => handleToggleLeftCheck(criterion.id)}
+                                    selected={leftChecked.includes(criterion.id)}
+                                    sx={{ py: 0.5 }}
+                                  >
+                                    <Checkbox
+                                      checked={leftChecked.includes(criterion.id)}
+                                      tabIndex={-1}
+                                      disableRipple
+                                      size="small"
+                                    />
+                                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                                      <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                        {criterion.criterion_text}
+                                      </Typography>
+                                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                        Weight: {criterion.weight} {criterion.is_required && '• Required'}
+                                      </Typography>
+                                    </Box>
+                                  </ListItemButton>
+                                </ListItem>
+                              ))}
+                            </List>
+                          </AccordionDetails>
+                        </Accordion>
+                      );
+                    })
+                  )}
+                </Box>
+              </Paper>
+            </Grid>
+
+            {/* Center - Transfer Buttons */}
+            <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Tooltip title="Move all to selected">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleMoveAllRight}
+                    disabled={filteredAvailableCriteria.every(s => s.criteria.length === 0)}
+                    sx={{ minWidth: 44 }}
+                  >
+                    <KeyboardDoubleArrowRightIcon />
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Move selected to right">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleMoveRight}
+                    disabled={leftChecked.length === 0}
+                    sx={{ minWidth: 44 }}
+                  >
+                    <ChevronRightIcon />
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Clear all selected">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleMoveAllLeft}
+                    disabled={orderedSelection.length === 0}
+                    sx={{ minWidth: 44 }}
+                  >
+                    <KeyboardDoubleArrowLeftIcon />
+                  </Button>
+                </Tooltip>
+              </Box>
+            </Grid>
+
+            {/* Right Panel - Selected Criteria */}
+            <Grid item xs={12} md={5}>
+              <Paper
+                elevation={0}
+                sx={{
+                  border: '1px solid #e0e0e0',
+                  borderRadius: 2,
+                  height: 450,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <Box sx={{ p: 1.5, borderBottom: '1px solid #e0e0e0', bgcolor: 'primary.light' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'white' }}>
+                    SELECTED CRITERIA ({orderedSelection.length})
+                  </Typography>
+                </Box>
+                <Box sx={{ flex: 1, overflow: 'auto' }}>
+                  {orderedSelection.length === 0 ? (
+                    <Box sx={{ p: 3, textAlign: 'center' }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        No criteria selected yet
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        Select criteria from the left panel
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <List dense disablePadding>
+                      {orderedSelection.map((criterion, index) => (
+                        <ListItem
+                          key={criterion.id}
+                          sx={{
+                            borderBottom: '1px solid #f0f0f0',
+                            py: 0.5,
+                            '&:hover': { bgcolor: 'grey.50' },
+                          }}
+                          secondaryAction={
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleMoveUp(index)}
+                                disabled={index === 0}
+                              >
+                                <KeyboardArrowUpIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleMoveDown(index)}
+                                disabled={index === orderedSelection.length - 1}
+                              >
+                                <KeyboardArrowDownIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleRemoveFromSelection(criterion.id)}
+                                color="error"
+                              >
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            </Box>
+                          }
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', minWidth: 0, pr: 12 }}>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: 'text.secondary',
+                                fontWeight: 600,
+                                minWidth: 28,
+                                mr: 1,
+                              }}
+                            >
+                              {index + 1}.
+                            </Typography>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                {criterion.criterion_text}
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                {criterion.sectionCode}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </ListItem>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+
+                {/* Section Summary */}
+                {getSectionSummary.length > 0 && (
+                  <Box sx={{ p: 1.5, borderTop: '1px solid #e0e0e0', bgcolor: 'grey.50' }}>
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                      Section Summary:
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {getSectionSummary.map(s => (
+                        <Chip
+                          key={s.code}
+                          label={`${s.code}: ${s.count}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 22 }}
+                        />
+                      ))}
+                    </Box>
                   </Box>
-                ))}
-              </AccordionDetails>
-            </Accordion>
-          ))}
+                )}
+              </Paper>
+            </Grid>
+          </Grid>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setOpenCriteriaDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaveCriteria}>Save Selection</Button>
+          <Button variant="contained" onClick={handleSaveCriteria}>
+            Save Selection
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

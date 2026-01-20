@@ -72,9 +72,9 @@ const HomeComponent = () => {
     localStorage.setItem(MENU_STATE_KEY, JSON.stringify(menuOpen));
   }, [menuOpen]);
 
-  // Auto-expand rubrics menu if on a rubrics sub-page
+  // Auto-expand rubrics menu if on any rubrics page
   useEffect(() => {
-    if (location.pathname.startsWith('/home/rubrics/')) {
+    if (location.pathname === '/home/rubrics' || location.pathname.startsWith('/home/rubrics/')) {
       setMenuOpen(prev => ({ ...prev, rubrics: true }));
     }
   }, [location.pathname]);
@@ -116,10 +116,10 @@ const HomeComponent = () => {
       {
         title: 'Rubrics',
         icon: GradingIcon,
-        path: '/home/rubrics',
         color: '#FF5630',
         menuKey: 'rubrics',
         subItems: [
+          { title: 'Overview', icon: GradingIcon, path: '/home/rubrics', color: '#FF5630' },
           { title: 'Frameworks', icon: AccountTreeIcon, path: '/home/rubrics/frameworks', color: '#FF5630' },
           { title: 'Templates', icon: DescriptionIcon, path: '/home/rubrics/templates', color: '#FF5630' },
           { title: 'Packs', icon: InventoryIcon, path: '/home/rubrics/packs', color: '#FF5630' },
@@ -162,9 +162,10 @@ const HomeComponent = () => {
                   onClick={() => {
                     if (hasSubItems) {
                       handleMenuToggle(item.menuKey);
+                    } else {
+                      navigate(item.path);
+                      if (isMobile) handleDrawerToggle();
                     }
-                    navigate(item.path);
-                    if (isMobile && !hasSubItems) handleDrawerToggle();
                   }}
                   sx={{
                     borderRadius: 2,
