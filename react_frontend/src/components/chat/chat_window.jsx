@@ -101,58 +101,6 @@ const ChatWindow = ({
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage]);
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.code === 'Space' && !e.repeat) {
-        const isTextInput = e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT';
-
-        // If focus is NOT in text input, start recording
-        if (!isTextInput) {
-          e.preventDefault();
-          if (!isRecording && conversationId && !isStreaming) {
-            startRecording();
-          }
-        }
-        // If focus IS in text input BUT it's empty, start recording
-        else if (isTextInput && newMessage.trim() === '') {
-          e.preventDefault();
-          if (!isRecording && conversationId && !isStreaming) {
-            startRecording();
-          }
-        }
-        // Otherwise, let spacebar work normally (add space to text)
-      }
-    };
-
-    const handleKeyUp = (e) => {
-      if (e.code === 'Space') {
-        const isTextInput = e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT';
-
-        // If focus is NOT in text input, stop recording
-        if (!isTextInput) {
-          e.preventDefault();
-          if (isRecording) {
-            stopRecording();
-          }
-        }
-        // If focus IS in text input BUT it was empty when recording started, stop recording
-        else if (isTextInput && isRecording) {
-          e.preventDefault();
-          stopRecording();
-        }
-        // Otherwise, let spacebar work normally
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [isRecording, conversationId, isStreaming, newMessage]);
-
   const handleAudioReady = useCallback((messageId, pendingId, totalChunks) => {
     console.log('[TTS] Audio ready:', { messageId, pendingId, totalChunks });
 
@@ -575,7 +523,7 @@ const ChatWindow = ({
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title="Hold to record (or hold spacebar when textbox is empty)">
+          <Tooltip title="Hold to record">
             <span>
               <IconButton
                 onMouseDown={startRecording}
