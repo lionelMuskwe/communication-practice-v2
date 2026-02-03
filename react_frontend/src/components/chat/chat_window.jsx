@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, TextField, Typography, List, ListItem, ListItemText,
   Avatar, Fab, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  IconButton, CircularProgress, Tooltip, Paper, Divider
+  IconButton, CircularProgress, Tooltip, Paper
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import SendIcon from '@mui/icons-material/Send';
 import MicIcon from '@mui/icons-material/Mic';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import ChatResultsDialog from './result_dialog';
 
 import {
@@ -14,9 +15,8 @@ import {
   getConversation,
   streamMessage,
   rubricAssessmentByConversation,
-  API_BASE_URL,
 } from '../../services/apiService';
-import store from '../../store';
+import useAudioQueue from '../../hooks/useAudioQueue';
 
 import {
   getCurrentConversationId,
@@ -42,15 +42,22 @@ const ChatWindow = ({
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState('');
   const [isAssessing, setIsAssessing] = useState(false);
-  const [isAudioLoading, setIsAudioLoading] = useState(false);
-
   const recognitionRef = useRef(null);
   const endOfMessagesRef = useRef(null);
   const streamingContentRef = useRef('');
-  const audioRef = useRef(null);
   const textInputRef = useRef(null);
   const shouldAutoSendRef = useRef(false);
   const transcribedTextRef = useRef('');
+  const pendingMessageIdRef = useRef(null);
+
+  const {
+    isPlaying: isAudioPlaying,
+    isLoading: isAudioQueueLoading,
+    startPlayback,
+    stopPlayback,
+    reset: resetAudioQueue,
+    playFullMessageAudio,
+  } = useAudioQueue(conversationId);
 
   useEffect(() => {
     const initializeConversation = async () => {
@@ -146,58 +153,20 @@ const ChatWindow = ({
     };
   }, [isRecording, conversationId, isStreaming, newMessage]);
 
-  const playMessageAudio = useCallback(async (messageId) => {
-    console.log('[TTS] playMessageAudio called with:', { messageId, conversationId });
+  const handleAudioReady = useCallback((messageId, pendingId, totalChunks) => {
+    console.log('[TTS] Audio ready:', { messageId, pendingId, totalChunks });
 
-    if (!messageId || !conversationId) {
-      console.warn('[TTS] Missing messageId or conversationId');
-      return;
+    if (totalChunks && totalChunks > 0 && pendingId) {
+      startPlayback(pendingId, totalChunks);
+    } else if (messageId) {
+      playFullMessageAudio(messageId);
     }
+  }, [startPlayback, playFullMessageAudio]);
 
-    try {
-      setIsAudioLoading(true);
-
-      const state = store.getState();
-      const token = state?.auth?.token;
-
-      const url = `${API_BASE_URL}/conversations/${conversationId}/audio/${messageId}/`;
-      console.log('[TTS] Fetching audio from:', url);
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      });
-
-      console.log('[TTS] Response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[TTS] Audio fetch failed:', { status: response.status, error: errorText });
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const audioBlob = await response.blob();
-      console.log('[TTS] Audio blob size:', audioBlob.size);
-
-      const audioUrl = URL.createObjectURL(audioBlob);
-      console.log('[TTS] Audio URL created:', audioUrl);
-
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl;
-        console.log('[TTS] Playing audio...');
-        await audioRef.current.play();
-        console.log('[TTS] Audio playing!');
-      }
-
-    } catch (error) {
-      console.error('[TTS] Audio playback error:', error);
-      // Silent failure - text is still available
-    } finally {
-      setIsAudioLoading(false);
-    }
-  }, [conversationId]);
+  const handleAudioChunkReady = useCallback((chunkIndex, pendingId) => {
+    console.log('[TTS] Chunk ready:', { chunkIndex, pendingId });
+    pendingMessageIdRef.current = pendingId;
+  }, []);
 
   const startRecording = () => {
     if (isRecording || !conversationId || isStreaming) return;
@@ -290,6 +259,9 @@ const ChatWindow = ({
       textInputRef.current?.focus();
     }, 100);
 
+    resetAudioQueue();
+    pendingMessageIdRef.current = null;
+
     streamMessage(
       conversationId,
       trimmedText,
@@ -308,7 +280,6 @@ const ChatWindow = ({
         streamingContentRef.current = '';
         setIsStreaming(false);
 
-        // Focus the text input after assistant responds
         setTimeout(() => {
           textInputRef.current?.focus();
         }, 100);
@@ -318,18 +289,15 @@ const ChatWindow = ({
         setIsStreaming(false);
         setStreamingMessage('');
         streamingContentRef.current = '';
+        resetAudioQueue();
         alert(`Error: ${error.message}`);
 
-        // Focus the text input even on error
         setTimeout(() => {
           textInputRef.current?.focus();
         }, 100);
       },
-      (messageId) => {
-        // Audio ready handler - play OpenAI TTS audio
-        console.log('[TTS] Message ID received:', messageId);
-        playMessageAudio(messageId);
-      }
+      handleAudioReady,
+      handleAudioChunkReady
     );
   };
 
@@ -377,6 +345,7 @@ const ChatWindow = ({
     setUserMessageCount(0);
     setStreamingMessage('');
     streamingContentRef.current = '';
+    resetAudioQueue();
     if (onConversationEnd) onConversationEnd();
   };
 
@@ -588,6 +557,24 @@ const ChatWindow = ({
             sx={{ '& .MuiOutlinedInput-root': { fontSize: { xs: '0.875rem', md: '1rem' } } }}
             inputRef={textInputRef}
           />
+          {isAudioPlaying && (
+            <Tooltip title="Stop audio">
+              <IconButton
+                onClick={stopPlayback}
+                color="secondary"
+                size="small"
+                sx={{
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  '@keyframes pulse': {
+                    '0%, 100%': { opacity: 1 },
+                    '50%': { opacity: 0.5 },
+                  },
+                }}
+              >
+                <VolumeUpIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="Hold to record (or hold spacebar when textbox is empty)">
             <span>
               <IconButton
@@ -682,13 +669,6 @@ const ChatWindow = ({
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Hidden audio player for OpenAI TTS */}
-      <audio
-        ref={audioRef}
-        style={{ display: 'none' }}
-        onError={(e) => console.error('Audio playback error:', e)}
-      />
     </Box>
   );
 };

@@ -8,6 +8,7 @@ from .views import (
     ConversationViewSet,
     ConversationMessageStreamView,
     MessageAudioStreamView,
+    AudioChunkStreamView,
     rubric_assessment,
     rubric_responses,
     get_conversation_assessments,
@@ -29,11 +30,18 @@ urlpatterns = [
         name='conversation-stream'
     ),
 
-    # Message audio endpoint
+    # Message audio endpoint (full message)
     path(
         'conversations/<uuid:pk>/audio/<uuid:message_id>/',
         MessageAudioStreamView.as_view(),
         name='message-audio'
+    ),
+
+    # Audio chunk endpoint (sentence-level)
+    path(
+        'conversations/<uuid:pk>/audio-chunk/<uuid:pending_id>/<int:chunk_index>/',
+        AudioChunkStreamView.as_view(),
+        name='audio-chunk'
     ),
 
     # Assessment retrieval

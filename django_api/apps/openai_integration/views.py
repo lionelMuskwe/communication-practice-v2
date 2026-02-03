@@ -6,7 +6,8 @@ Handles conversation management and SSE streaming for Chat Completions API.
 import logging
 import threading
 import time
-from typing import Dict, Tuple, Optional
+import uuid
+from typing import Dict, Tuple, Optional, List
 from django.http import StreamingHttpResponse
 from django.db import transaction
 from rest_framework import status, viewsets
@@ -19,6 +20,7 @@ from apps.scenarios.models import AssistantScenario
 from apps.activities.models import Activity
 from .models import Conversation, Message, Assessment
 from .services import ChatCompletionService, TextToSpeechService, build_full_context, get_openai_model
+from .utils import SentenceDetector
 from .evaluators import (
     CategoryRubricEvaluator,
     SimpleRubricEvaluator,
@@ -42,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# TTS Audio Cache
+# TTS Audio Cache (supports chunked storage)
 # ============================================================================
 
 class TTSAudioCache:
@@ -51,45 +53,85 @@ class TTSAudioCache:
 
     Stores audio bytes with expiration to reduce latency.
     Thread-safe for concurrent access.
+
+    Supports both full message audio and sentence chunks:
+    - Full message: key = message_id
+    - Sentence chunk: key = message_id:chunk_index
     """
     def __init__(self, ttl_seconds: int = 60):
         self._cache: Dict[str, Tuple[bytes, float]] = {}
+        self._chunk_ready: Dict[str, Dict[int, bool]] = {}
         self._lock = threading.Lock()
         self._ttl = ttl_seconds
 
-    def set(self, message_id: str, audio_data: bytes):
+    def set(self, key: str, audio_data: bytes):
         """Store audio data with timestamp."""
         with self._lock:
-            self._cache[message_id] = (audio_data, time.time())
-            logger.info(f"[TTS Cache] Stored audio for message {message_id} ({len(audio_data)} bytes)")
+            self._cache[key] = (audio_data, time.time())
+            logger.info(f"[TTS Cache] Stored audio for {key} ({len(audio_data)} bytes)")
 
-    def get(self, message_id: str) -> Optional[bytes]:
+    def set_chunk(self, message_id: str, chunk_index: int, audio_data: bytes):
+        """Store a sentence audio chunk."""
+        key = f"{message_id}:{chunk_index}"
+        with self._lock:
+            self._cache[key] = (audio_data, time.time())
+            if message_id not in self._chunk_ready:
+                self._chunk_ready[message_id] = {}
+            self._chunk_ready[message_id][chunk_index] = True
+            logger.info(f"[TTS Cache] Stored chunk {chunk_index} for message {message_id} ({len(audio_data)} bytes)")
+
+    def get(self, key: str) -> Optional[bytes]:
         """Retrieve audio data if not expired."""
         with self._lock:
-            if message_id not in self._cache:
+            if key not in self._cache:
                 return None
 
-            audio_data, timestamp = self._cache[message_id]
+            audio_data, timestamp = self._cache[key]
 
-            # Check if expired
             if time.time() - timestamp > self._ttl:
-                del self._cache[message_id]
-                logger.info(f"[TTS Cache] Expired audio for message {message_id}")
+                del self._cache[key]
+                logger.info(f"[TTS Cache] Expired audio for {key}")
                 return None
 
-            logger.info(f"[TTS Cache] Cache hit for message {message_id}")
+            logger.info(f"[TTS Cache] Cache hit for {key}")
             return audio_data
+
+    def get_chunk(self, message_id: str, chunk_index: int) -> Optional[bytes]:
+        """Retrieve a sentence audio chunk."""
+        key = f"{message_id}:{chunk_index}"
+        return self.get(key)
+
+    def is_chunk_ready(self, message_id: str, chunk_index: int) -> bool:
+        """Check if a chunk is ready without retrieving it."""
+        with self._lock:
+            return (
+                message_id in self._chunk_ready and
+                chunk_index in self._chunk_ready[message_id]
+            )
+
+    def get_chunk_count(self, message_id: str) -> int:
+        """Get number of chunks stored for a message."""
+        with self._lock:
+            if message_id not in self._chunk_ready:
+                return 0
+            return len(self._chunk_ready[message_id])
 
     def cleanup_expired(self):
         """Remove expired entries."""
         with self._lock:
             current_time = time.time()
             expired = [
-                msg_id for msg_id, (_, timestamp) in self._cache.items()
+                key for key, (_, timestamp) in self._cache.items()
                 if current_time - timestamp > self._ttl
             ]
-            for msg_id in expired:
-                del self._cache[msg_id]
+            for key in expired:
+                del self._cache[key]
+                if ':' in key:
+                    msg_id, chunk_idx = key.rsplit(':', 1)
+                    if msg_id in self._chunk_ready:
+                        self._chunk_ready[msg_id].pop(int(chunk_idx), None)
+                        if not self._chunk_ready[msg_id]:
+                            del self._chunk_ready[msg_id]
             if expired:
                 logger.info(f"[TTS Cache] Cleaned up {len(expired)} expired entries")
 
@@ -100,7 +142,7 @@ tts_cache = TTSAudioCache(ttl_seconds=60)
 
 def pregenerate_tts_audio(message_id: str, text: str, voice: str):
     """
-    Background thread function to pre-generate TTS audio.
+    Background thread function to pre-generate TTS audio for full message.
 
     Args:
         message_id: Message UUID to cache audio under
@@ -110,7 +152,6 @@ def pregenerate_tts_audio(message_id: str, text: str, voice: str):
     try:
         logger.info(f"[TTS Pregeneration] Starting for message {message_id}")
 
-        # Generate audio (this blocks until complete)
         audio_chunks = []
         for chunk in TextToSpeechService.generate_speech(
             text=text,
@@ -121,17 +162,45 @@ def pregenerate_tts_audio(message_id: str, text: str, voice: str):
         ):
             audio_chunks.append(chunk)
 
-        # Combine all chunks
         audio_data = b''.join(audio_chunks)
-
-        # Store in cache
         tts_cache.set(str(message_id), audio_data)
 
         logger.info(f"[TTS Pregeneration] Completed for message {message_id} ({len(audio_data)} bytes)")
 
     except Exception as e:
         logger.error(f"[TTS Pregeneration] Failed for message {message_id}: {e}")
-        # Silent failure - audio will be generated on-demand if needed
+
+
+def pregenerate_tts_chunk(message_id: str, chunk_index: int, sentence: str, voice: str):
+    """
+    Background thread function to pre-generate TTS audio for a single sentence.
+
+    Args:
+        message_id: Message UUID
+        chunk_index: Sentence index (0-based)
+        sentence: Sentence text to convert
+        voice: OpenAI voice ID
+    """
+    try:
+        logger.info(f"[TTS Chunk] Starting chunk {chunk_index} for message {message_id}")
+
+        audio_chunks = []
+        for chunk in TextToSpeechService.generate_speech(
+            text=sentence,
+            voice=voice,
+            model='tts-1',
+            response_format='mp3',
+            speed=1.0
+        ):
+            audio_chunks.append(chunk)
+
+        audio_data = b''.join(audio_chunks)
+        tts_cache.set_chunk(str(message_id), chunk_index, audio_data)
+
+        logger.info(f"[TTS Chunk] Completed chunk {chunk_index} for message {message_id} ({len(audio_data)} bytes)")
+
+    except Exception as e:
+        logger.error(f"[TTS Chunk] Failed chunk {chunk_index} for message {message_id}: {e}")
 
 
 # ============================================================================
@@ -354,74 +423,89 @@ class ConversationMessageStreamView(APIView):
         )
 
         def event_stream():
-            """Generator for SSE stream."""
+            """Generator for SSE stream with sentence-level TTS."""
+            import json
+
             full_content = ""
+            sentence_detector = SentenceDetector()
+            chunk_index = 0
+            pending_message_id = str(uuid.uuid4())
+            voice = conversation.scenario.voice if conversation.scenario else 'nova'
+            tts_threads: List[threading.Thread] = []
 
             try:
-                # Stream from OpenAI
                 stream = ChatCompletionService.stream_chat_completion(
                     messages=messages,
                     model=get_openai_model()
                 )
 
                 for chunk in stream:
-                    # Extract content from chunk
                     if chunk.startswith('data: '):
-                        import json
                         try:
                             data = json.loads(chunk[6:])
 
-                            # Check if this is the done event
                             if data.get('done'):
-                                # Don't yield done yet - save message first
-                                # Save assistant message
+                                final_sentence = sentence_detector.flush()
+                                if final_sentence:
+                                    thread = threading.Thread(
+                                        target=pregenerate_tts_chunk,
+                                        args=(pending_message_id, chunk_index, final_sentence, voice),
+                                        daemon=True
+                                    )
+                                    thread.start()
+                                    tts_threads.append(thread)
+                                    logger.info(f"[TTS] Started chunk {chunk_index} (final) for pending message")
+                                    chunk_index += 1
+
                                 assistant_message = Message.objects.create(
                                     conversation=conversation,
                                     role='assistant',
                                     content=full_content,
                                     model=get_openai_model()
                                 )
-
-                                # Update conversation timestamp
                                 conversation.save(update_fields=['updated_at'])
 
-                                # Start TTS generation in background thread (parallel processing)
-                                voice = conversation.scenario.voice if conversation.scenario else 'nova'
-                                tts_thread = threading.Thread(
-                                    target=pregenerate_tts_audio,
-                                    args=(str(assistant_message.id), full_content, voice),
-                                    daemon=True
-                                )
-                                tts_thread.start()
-                                logger.info(f"[TTS] Started background generation for message {assistant_message.id}")
+                                actual_message_id = str(assistant_message.id)
 
-                                # Send message ID to frontend for audio fetch BEFORE done
-                                yield f"data: {json.dumps({'message_id': str(assistant_message.id)})}\n\n"
+                                yield f"data: {json.dumps({'message_id': actual_message_id, 'pending_id': pending_message_id, 'total_chunks': chunk_index})}\n\n"
 
                                 logger.info(
                                     f"Conversation {conversation.id}: "
                                     f"User message {user_message.id}, "
-                                    f"Assistant message {assistant_message.id}"
+                                    f"Assistant message {assistant_message.id}, "
+                                    f"Total chunks: {chunk_index}"
                                 )
 
-                                # NOW yield the done event
                                 yield chunk
                                 break
 
                             elif 'token' in data:
-                                full_content += data['token']
-                                # Yield token chunks immediately
+                                token = data['token']
+                                full_content += token
+
+                                sentences = sentence_detector.add_token(token)
+                                for sentence in sentences:
+                                    thread = threading.Thread(
+                                        target=pregenerate_tts_chunk,
+                                        args=(pending_message_id, chunk_index, sentence, voice),
+                                        daemon=True
+                                    )
+                                    thread.start()
+                                    tts_threads.append(thread)
+                                    logger.info(f"[TTS] Started chunk {chunk_index}: '{sentence[:50]}...'")
+
+                                    yield f"data: {json.dumps({'audio_chunk_ready': chunk_index, 'pending_id': pending_message_id})}\n\n"
+                                    chunk_index += 1
+
                                 yield chunk
+
                         except json.JSONDecodeError:
-                            # Yield non-JSON chunks as-is
                             yield chunk
                     else:
-                        # Yield non-data chunks as-is
                         yield chunk
 
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
-                import json
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
         response = StreamingHttpResponse(
@@ -570,6 +654,87 @@ class MessageAudioStreamView(APIView):
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
         return response
+
+
+# ============================================================================
+# Audio Chunk Streaming View (for sentence-level TTS)
+# ============================================================================
+
+class AudioChunkStreamView(APIView):
+    """
+    Stream TTS audio for a specific sentence chunk.
+
+    GET /api/conversations/<uuid>/audio-chunk/<pending_id>/<chunk_index>/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, pending_id, chunk_index):
+        """
+        Stream audio for a sentence chunk.
+
+        Args:
+            pk: Conversation UUID
+            pending_id: Pending message ID (used during streaming)
+            chunk_index: Sentence chunk index (0-based)
+        """
+        try:
+            conversation = Conversation.objects.get(pk=pk, user=request.user)
+        except Conversation.DoesNotExist:
+            return Response(
+                {"message": "Conversation not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            chunk_idx = int(chunk_index)
+        except ValueError:
+            return Response(
+                {"message": "Invalid chunk index"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        cached_audio = tts_cache.get_chunk(str(pending_id), chunk_idx)
+
+        if cached_audio:
+            logger.info(f"[TTS Chunk] Serving chunk {chunk_idx} for pending {pending_id}")
+
+            def audio_stream():
+                chunk_size = 8192
+                for i in range(0, len(cached_audio), chunk_size):
+                    yield cached_audio[i:i + chunk_size]
+
+            response = StreamingHttpResponse(
+                audio_stream(),
+                content_type='audio/mpeg'
+            )
+            response['Cache-Control'] = 'no-cache'
+            response['X-Accel-Buffering'] = 'no'
+            return response
+
+        for attempt in range(30):
+            time.sleep(0.1)
+            cached_audio = tts_cache.get_chunk(str(pending_id), chunk_idx)
+            if cached_audio:
+                logger.info(f"[TTS Chunk] Chunk ready after {(attempt + 1) * 0.1:.1f}s")
+
+                def audio_stream():
+                    chunk_size = 8192
+                    for i in range(0, len(cached_audio), chunk_size):
+                        yield cached_audio[i:i + chunk_size]
+
+                response = StreamingHttpResponse(
+                    audio_stream(),
+                    content_type='audio/mpeg'
+                )
+                response['Cache-Control'] = 'no-cache'
+                response['X-Accel-Buffering'] = 'no'
+                return response
+
+        logger.warning(f"[TTS Chunk] Chunk {chunk_idx} not ready for pending {pending_id}")
+        return Response(
+            {"message": "Audio chunk not ready", "retry": True},
+            status=status.HTTP_202_ACCEPTED
+        )
 
 
 # ============================================================================

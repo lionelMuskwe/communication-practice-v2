@@ -312,10 +312,11 @@ export const updateConversation = (conversationId, data) =>
  * @param {string} conversationId - Conversation UUID
  * @param {string} content - User message content
  * @param {Function} onChunk - Callback for each token: (token) => void
- * @param {Function} onComplete - Callback when done: () => void
+ * @param {Function} onComplete - Callback when done: (messageId, pendingId, totalChunks) => void
  * @param {Function} onError - Callback on error: (error) => void
- * @param {Function} onAudioReady - Callback when audio is ready: (messageId) => void
- * @returns {EventSource} The EventSource object (can be closed manually)
+ * @param {Function} onAudioReady - Callback when full audio is ready (legacy): (messageId) => void
+ * @param {Function} onAudioChunkReady - Callback when a sentence chunk is ready: (chunkIndex, pendingId) => void
+ * @returns {void}
  */
 export const streamMessage = (
   conversationId,
@@ -323,14 +324,14 @@ export const streamMessage = (
   onChunk,
   onComplete,
   onError,
-  onAudioReady
+  onAudioReady,
+  onAudioChunkReady
 ) => {
   const state = store.getState();
   const token = state?.auth?.token;
 
   const url = `${API_BASE_URL}/conversations/${conversationId}/stream/`;
 
-  // Use fetch with ReadableStream for SSE
   fetch(url, {
     method: 'POST',
     headers: {
@@ -356,7 +357,6 @@ export const streamMessage = (
               return;
             }
 
-            // Decode chunk
             const chunk = decoder.decode(value, { stream: true });
             const lines = chunk.split('\n');
 
@@ -371,10 +371,16 @@ export const streamMessage = (
                     return;
                   }
 
+                  if (data.audio_chunk_ready !== undefined) {
+                    if (onAudioChunkReady) {
+                      onAudioChunkReady(data.audio_chunk_ready, data.pending_id);
+                    }
+                    continue;
+                  }
+
                   if (data.message_id) {
-                    // Message saved, trigger audio playback
                     if (onAudioReady) {
-                      onAudioReady(data.message_id);
+                      onAudioReady(data.message_id, data.pending_id, data.total_chunks);
                     }
                     continue;
                   }
@@ -393,7 +399,6 @@ export const streamMessage = (
               }
             }
 
-            // Continue reading
             readStream();
           })
           .catch((error) => {
